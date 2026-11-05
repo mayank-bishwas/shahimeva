@@ -38,6 +38,23 @@ document.querySelectorAll('[data-purpose="pricing-row"]').forEach((row) => {
   }
 });
 
+// Homepage pricing rows filter
+const pricingRows = Array.from(document.querySelectorAll('[data-purpose="pricing-row"]'));
+if (pricingRows.length && homepageCategoryFilter) {
+  function applyHomepageCategoryFilter() {
+    const selected = Array.from(
+      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]:checked')
+    ).map((input) => input.value);
+    pricingRows.forEach((row) => {
+      const category = row.dataset.category || "";
+      const visible =
+        selected.length === 0 || selected.includes("all") || selected.includes(category);
+      row.hidden = !visible;
+    });
+  }
+  homepageCategoryFilter.addEventListener("change", applyHomepageCategoryFilter);
+}
+
 const mobileMenuToggle = document.querySelector(".mobile-menu-toggle");
 const mobileNavPanel = document.querySelector("#mobile-nav-panel");
 const mobileMenuBackdrop = document.querySelector(".mobile-menu-backdrop");
@@ -288,4 +305,60 @@ if (salesBanner instanceof HTMLDialogElement && salesBannerClose) {
       storyObserver.observe(storySection);
     }
   }
+}
+
+// Homepage multi-select category filter
+const homepageCategoryFilter = document.getElementById("homepage-category-filter-menu");
+const homepageCategoryTrigger = document.getElementById("homepage-category-filter-trigger");
+const homepageCategoryValue = document.getElementById("homepage-category-filter-value");
+
+if (homepageCategoryFilter && homepageCategoryTrigger && homepageCategoryValue) {
+  function toggleHomepageCategoryMenu() {
+    const isOpen = homepageCategoryFilter.hidden === false;
+    homepageCategoryFilter.hidden = !isOpen;
+    homepageCategoryTrigger.setAttribute("aria-expanded", String(!isOpen));
+  }
+
+  function closeHomepageCategoryMenu(event) {
+    if (
+      event.target.closest(".inventory-multiselect__menu") ||
+      event.target.closest(".inventory-multiselect__trigger")
+    )
+      return;
+    homepageCategoryFilter.hidden = true;
+    homepageCategoryTrigger.setAttribute("aria-expanded", "false");
+  }
+
+  homepageCategoryTrigger.addEventListener("click", toggleHomepageCategoryMenu);
+  document.addEventListener("click", closeHomepageCategoryMenu);
+
+  homepageCategoryFilter.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target.dataset.allOption === "true") {
+      const allChecked = target.checked;
+      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+        cb.checked = allChecked;
+      });
+    } else {
+      const allCheckbox = homepageCategoryFilter.querySelector('input[data-all-option="true"]');
+      const individualCheckboxes = homepageCategoryFilter.querySelectorAll(
+        'input[type="checkbox"]:not([data-all-option="true"])'
+      );
+      if (!target.checked) {
+        allCheckbox.checked = false;
+      } else if (Array.from(individualCheckboxes).every((cb) => cb.checked)) {
+        allCheckbox.checked = true;
+      }
+    }
+    const selected = Array.from(
+      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]:checked')
+    ).map((input) => input.value);
+    if (selected.length === 0 || selected.includes("all")) {
+      homepageCategoryValue.textContent = "सभी उत्पाद";
+    } else if (selected.length === 1) {
+      homepageCategoryValue.textContent = selected[0];
+    } else {
+      homepageCategoryValue.textContent = `${selected.length} चुने हुए`;
+    }
+  });
 }

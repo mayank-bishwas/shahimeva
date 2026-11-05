@@ -1487,3 +1487,327 @@ select:focus-visible {
     transition: none;
   }
 }
+/* Shared stock and WhatsApp actions */
+.header-actions .header-stock-cta,
+.header-actions [data-purpose="header-whatsapp-cta"] {
+  min-width: 9.5rem;
+  min-height: 2.85rem;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+  white-space: nowrap;
+}
+
+.header-stock-cta {
+  border: 1px solid rgba(169, 132, 74, 0.55);
+  background: #f3ead2;
+  color: var(--forest);
+}
+
+.header-stock-cta:hover {
+  border-color: var(--gold);
+  background: #ead9ae;
+  color: var(--forest);
+}
+
+.stock-cta-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.header-actions [data-purpose="header-whatsapp-cta"] {
+  gap: 0.55rem;
+}
+
+header[data-purpose="site-navigation"] nav[data-purpose="main-nav-links"] a[aria-current="page"],
+header[data-purpose="site-navigation"] nav[data-purpose="main-nav-links"] a.is-active {
+  border-bottom: 2px solid var(--gold);
+  color: var(--forest);
+}
+
+/* Multi-select dropdowns (shared between homepage and inventory) */
+.inventory-multiselect {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.inventory-multiselect__trigger {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.7rem 2.2rem 0.7rem 1rem;
+  border: 1px solid #d1d8cc;
+  border-radius: 999px;
+  background-color: #fffefa;
+  color: #24352b;
+  font-family: "Tiro Devanagari Hindi", "Plus Jakarta Sans", sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 3px 12px -10px rgba(24, 44, 35, 0.5);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.inventory-multiselect__trigger:hover {
+  border-color: var(--forest);
+}
+
+.inventory-multiselect__trigger[aria-expanded="true"] {
+  border-color: var(--forest);
+  box-shadow: 0 3px 12px -10px rgba(24, 44, 35, 0.5), 0 0 0 3px rgba(33, 69, 50, 0.15);
+}
+
+.inventory-multiselect__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #788075;
+  margin-bottom: 0.2rem;
+  display: block;
+}
+
+.inventory-multiselect__value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #24352b;
+}
+
+.inventory-multiselect__chevron {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.6rem;
+  color: #788075;
+  transition: transform 0.2s;
+}
+
+.inventory-multiselect__trigger[aria-expanded="true"] .inventory-multiselect__chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.inventory-multiselect__menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  width: 100%;
+  max-height: 24rem;
+  overflow-y: auto;
+  background-color: #fffefa;
+  border: 1px solid #d1d8cc;
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px -8px rgba(24, 44, 35, 0.3);
+  z-index: 50;
+  padding: 0.5rem 0;
+}
+
+.inventory-multiselect__option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #24352b;
+  font-family: "Tiro Devanagari Hindi", "Plus Jakarta Sans", sans-serif;
+}
+
+.inventory-multiselect__option:hover {
+  background-color: #f3f7ee;
+}
+
+.inventory-multiselect__option input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--forest);
+  cursor: pointer;
+}
+
+.inventory-multiselect__box {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1.5px solid #788075;
+  border-radius: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.inventory-multiselect__option input[type="checkbox"]:checked + .inventory-multiselect__box {
+  background-color: var(--forest);
+  border-color: var(--forest);
+}
+
+.inventory-multiselect__option input[type="checkbox"]:checked + .inventory-multiselect__box::after {
+  content: "✓";
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: bold;
+}
+
+.inventory-multiselect__text {
+  flex: 1;
+}
+
+.mobile-menu-stock {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 0.45rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(169, 132, 74, 0.55);
+  border-radius: 9999px;
+  background: #f3ead2;
+  color: var(--forest);
+  font-family: "Tiro Devanagari Hindi", serif;
+  font-weight: 700;
+}
+
+.site-stock-cta,
+.site-whatsapp-cta {
+  display: inline-flex;
+  min-width: 15rem;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  box-shadow: 0 8px 20px -14px rgba(24, 44, 35, 0.7);
+  font-family: "Tiro Devanagari Hindi", serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.site-stock-cta {
+  border-color: rgba(169, 132, 74, 0.6);
+  background: #f3ead2;
+  color: var(--forest);
+}
+
+.site-stock-cta:hover {
+  border-color: var(--gold);
+  background: #ead9ae;
+  color: var(--forest);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px -16px rgba(24, 44, 35, 0.7);
+}
+
+.site-whatsapp-cta {
+  border-color: rgba(199, 164, 92, 0.5);
+  background: var(--forest);
+  color: var(--cream);
+}
+
+.site-whatsapp-cta:hover {
+  background: var(--olive);
+  color: var(--cream);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px -16px rgba(24, 44, 35, 0.8);
+}
+
+.site-whatsapp-cta svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  fill: #25d366;
+}
+
+.product-category-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.footer-contact-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+footer[data-purpose="site-footer"] .footer-contact-icon + a {
+  display: inline-flex;
+  align-items: center;
+}
+
+select[data-purpose="variant-select"],
+.inventory-select select {
+  appearance: none;
+  border: 1px solid rgba(169, 132, 74, 0.42);
+  border-radius: 0.7rem;
+  background-color: #fffdf6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23214532' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 0.8rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+  color: var(--forest);
+  box-shadow: 0 3px 12px -10px rgba(24, 44, 35, 0.55);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+select[data-purpose="variant-select"]:hover,
+.inventory-select select:hover {
+  border-color: var(--gold);
+  background-color: #f7f0df;
+}
+
+select[data-purpose="variant-select"]:focus,
+.inventory-select select:focus {
+  border-color: var(--forest);
+  outline: 3px solid rgba(33, 69, 50, 0.15);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--forest);
+}
+
+select[data-purpose="variant-select"] option,
+.inventory-select select option {
+  background: #fffdf6;
+  color: var(--forest);
+}
+
+select[data-purpose="variant-select"] option:checked,
+.inventory-select select option:checked {
+  background: #dce7d7;
+  color: var(--forest);
+}
+
+@media (max-width: 1023px) {
+  .header-actions .header-stock-cta {
+    display: none;
+  }
+
+  .mobile-nav-panel > .mobile-menu-stock {
+    min-height: 50px;
+    border: 1px solid rgba(169, 132, 74, 0.55);
+    border-radius: 9999px;
+    background: #f3ead2;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero-cta .site-stock-cta,
+  .hero-cta .site-whatsapp-cta,
+  .product-category-ctas .site-stock-cta,
+  .product-category-ctas .site-whatsapp-cta {
+    width: min(100%, 24rem);
+  }
+
+  #price-list > div > .mt-8.text-center .site-stock-cta,
+  [data-purpose="final-cta"] .site-whatsapp-cta {
+    width: min(100%, 24rem);
+    min-width: 0;
+    padding-inline: 1.2rem;
+    font-size: 0.9rem;
+  }
+}
