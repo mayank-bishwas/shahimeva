@@ -4,13 +4,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const searchInput = document.querySelector("#product-search");
   const categoryFilter = document.querySelector("#category-filter");
   const availabilityFilter = document.querySelector("#availability-filter");
-  const categoryTrigger = document.querySelector("#category-filter-trigger");
-  const categoryValue = document.querySelector("#category-filter-value");
-  const categoryMenu = document.querySelector("#category-filter-menu");
-  const availabilityTrigger = document.querySelector("#availability-filter-trigger");
-  const availabilityValue = document.querySelector("#availability-filter-value");
-  const availabilityMenu = document.querySelector("#availability-filter-menu");
   const quoteTab = document.querySelector("#whatsapp-cta-btn");
+  const inventoryWhatsApp = document.querySelector("#inventory-whatsapp");
   const resetButton = document.querySelector("#btn-recalculate");
   const noResults = document.querySelector("#no-results");
   const printSummary = document.querySelector("#print-quotation-summary");
@@ -27,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let pointerStartX = null;
 
   if (!Array.isArray(products) || !tableBody || !searchInput || !categoryFilter ||
-      !availabilityFilter || !quoteTab || !resetButton || !noResults ||
+      !availabilityFilter || !quoteTab || !inventoryWhatsApp || !resetButton || !noResults ||
       !printSummary || !(lightbox instanceof HTMLDialogElement) || !lightboxImage ||
       !lightboxCaption || !previousImageButton || !nextImageButton) {
     throw new Error("Inventory page is missing required data or controls.");
@@ -35,6 +30,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const formatMoney = (amount) => `₹${amount.toLocaleString("en-IN")}`;
   const formatWeight = (weight) => `${Number.isInteger(weight) ? weight : weight.toFixed(1)} kg`;
+  const whatsappUrl = (message) =>
+    `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(message)}`;
+  const generalEnquiryUrl = whatsappUrl(
+    "नमस्ते शाही मेवा,\n\nमुझे आपके उत्पादों के बारे में जानकारी चाहिए।\n\nधन्यवाद।",
+  );
 
   function makeCell(className, text) {
     const cell = document.createElement("td");
@@ -51,9 +51,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const enquiry = document.createElement("a");
     enquiry.textContent = "सच्ची?! मुझे अभी मेसेज करें >";
-    enquiry.href = `https://wa.me/918757346644?text=${encodeURIComponent(
-      `नमस्ते प्रभास, मुझे ${product.name} (${product.pack}) की 99 से अधिक मात्रा चाहिए। कृपया बड़ी मात्रा के लिए संपर्क करें।`,
-    )}`;
+    enquiry.href = whatsappUrl([
+      "नमस्ते शाही मेवा,",
+      "",
+      `मुझे ${product.name} (${product.pack}) की 99 से अधिक मात्रा चाहिए।`,
+      "",
+      "कृपया जल्द-से-जल्द मुझे संपर्क करें।",
+      "",
+      "धन्यवाद!",
+    ].join("\n"));
     enquiry.target = "_blank";
     enquiry.rel = "noopener noreferrer";
     bulkMessage.append(enquiry);
@@ -194,9 +200,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     rows.forEach(({ element, product }) => {
       const matchesQuery = !query || element.dataset.search.includes(query);
-      const matchesCategory = categories.length === 0 || categories.includes("all") || categories.includes(product.category);
+      const matchesCategory = categories.includes(product.category);
       const matchesAvailability =
-        availability.length === 0 || availability.includes("all") ||
         (availability.includes("in-stock") && product.inStock) ||
         (availability.includes("out-of-stock") && !product.inStock);
       const visible = matchesQuery && matchesCategory && matchesAvailability;
@@ -209,89 +214,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getSelectedValues(filter) {
-    if (!filter) return [];
-    return Array.from(filter.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value);
+    return Array.from(
+      filter.querySelectorAll('input[type="checkbox"]:checked:not([data-all-option="true"])'),
+    ).map((input) => input.value);
   }
-
-  function updateFilterValue(triggerValue, selected) {
-    if (selected.length === 0 || selected.includes("all")) {
-      triggerValue.textContent = "सभी उत्पाद";
-    } else if (selected.length === 1) {
-      triggerValue.textContent = selected[0];
-    } else {
-      triggerValue.textContent = `${selected.length} चुने हुए`;
-    }
-  }
-
-  function toggleCategoryMenu() {
-    const isOpen = categoryMenu.hidden === false;
-    closeAllMenus();
-    if (!isOpen) {
-      categoryMenu.hidden = false;
-      categoryTrigger.setAttribute("aria-expanded", "true");
-    }
-  }
-
-  function toggleAvailabilityMenu() {
-    const isOpen = availabilityMenu.hidden === false;
-    closeAllMenus();
-    if (!isOpen) {
-      availabilityMenu.hidden = false;
-      availabilityTrigger.setAttribute("aria-expanded", "true");
-    }
-  }
-
-  function closeAllMenus() {
-    categoryMenu.hidden = true;
-    availabilityMenu.hidden = true;
-    categoryTrigger.setAttribute("aria-expanded", "false");
-    availabilityTrigger.setAttribute("aria-expanded", "false");
-  }
-
-  function closeMultiselectMenus(event) {
-    if (event.target.closest(".inventory-multiselect__menu") ||
-        event.target.closest(".inventory-multiselect__trigger")) return;
-    closeAllMenus();
-  }
-
-  categoryFilter.addEventListener("change", (event) => {
-    const target = event.target;
-    if (target.dataset.allOption === "true") {
-      const allChecked = target.checked;
-      categoryFilter.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.checked = allChecked;
-      });
-    } else {
-      const allCheckbox = categoryFilter.querySelector('input[data-all-option="true"]');
-      const individualCheckboxes = categoryFilter.querySelectorAll('input[type="checkbox"]:not([data-all-option="true"])');
-      if (!target.checked) {
-        allCheckbox.checked = false;
-      } else if (Array.from(individualCheckboxes).every((cb) => cb.checked)) {
-        allCheckbox.checked = true;
-      }
-    }
-    updateFilterValue(categoryValue, getSelectedValues(categoryFilter));
-    filterProducts();
-  });
-  availabilityFilter.addEventListener("change", (event) => {
-    const target = event.target;
-    if (target.dataset.allOption === "true") {
-      const allChecked = target.checked;
-      availabilityFilter.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.checked = allChecked;
-      });
-    } else {
-      const allCheckbox = availabilityFilter.querySelector('input[data-all-option="true"]');
-      const individualCheckboxes = availabilityFilter.querySelectorAll('input[type="checkbox"]:not([data-all-option="true"])');
-      if (!target.checked) {
-        allCheckbox.checked = false;
-      } else if (Array.from(individualCheckboxes).every((cb) => cb.checked)) {
-        allCheckbox.checked = true;
-      }
-    }
-    updateFilterValue(availabilityValue, getSelectedValues(availabilityFilter));
-    filterProducts();
-  });
 
   function renderPrintSummary(selectedProducts, amount, weight) {
     printSummary.replaceChildren();
@@ -319,6 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateSummary() {
     let weight = 0;
     let amount = 0;
+    let selectedQuantity = 0;
     const selectedProducts = [];
 
     rows.forEach(({ element, product, input, printQuantity, bulkMessage }) => {
@@ -336,6 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (state.selected) {
         weight += quantity * product.weight;
         amount += lineTotal;
+        selectedQuantity += quantity;
         selectedProducts.push({ product, quantity, lineTotal });
       }
 
@@ -343,32 +271,34 @@ document.addEventListener("DOMContentLoaded", () => {
       bulkMessage.hidden = !state.overLimit;
     });
 
-    const lineCount = selectedProducts.length;
+    const hasSelection = selectedProducts.length > 0;
     const formattedWeight = formatWeight(weight);
     document.querySelector("#total-weight").textContent = formattedWeight;
-    document.querySelector("#total-quantity").textContent = String(lineCount);
-    document.querySelector("#total-item-label").textContent = lineCount === 1 ? "item" : "items";
+    document.querySelector("#total-quantity").textContent = String(selectedQuantity);
+    document.querySelector("#total-item-label").textContent = selectedQuantity === 1 ? "item" : "items";
     document.querySelector("#total-amount").textContent = formatMoney(amount);
 
-    const message = [
+    const quotationMessage = [
       "नमस्ते शाही मेवा,",
       "",
-      "मैं आपसे निम्नलिखित सामान के लिए कीमत और उपलब्धता की पुष्टि करना चाहता/चाहती हूँ:",
+      "मुझे आपसे निम्नलिखित सामान के लिए कीमत और उपलब्धता की पुष्टि करनी है:",
       "",
       ...selectedProducts.map(({ product, quantity, lineTotal }) =>
-        `• [${product.sku}] ${product.name} · ${product.pack} · मात्रा ${quantity} · इकाई दर ${formatMoney(product.price)} · कुल ${formatMoney(lineTotal)}`,
+        `• [${product.sku}] ${product.name}: ${product.pack} · मात्रा ${quantity} · इकाई दर ${formatMoney(product.price)} = ${formatMoney(lineTotal)}`,
       ),
       "",
-      `कुल अनुमानित राशि: ${formatMoney(amount)}`,
-      `कुल वजन: ${formattedWeight}`,
+      `*कुल अनुमानित राशि: ${formatMoney(amount)}*`,
+      `_कुल वजन: ${formattedWeight}_`,
       "",
       "धन्यवाद।",
     ].join("\n");
-    quoteTab.href = `https://wa.me/918757346644?text=${encodeURIComponent(message)}`;
-    quoteTab.classList.toggle("is-visible", lineCount > 0);
-    quoteTab.setAttribute("aria-hidden", String(lineCount === 0));
-    quoteTab.tabIndex = lineCount > 0 ? 0 : -1;
-    document.body.classList.toggle("inventory-has-selection", lineCount > 0);
+    const enquiryUrl = hasSelection ? whatsappUrl(quotationMessage) : generalEnquiryUrl;
+    quoteTab.href = enquiryUrl;
+    inventoryWhatsApp.href = enquiryUrl;
+    quoteTab.classList.toggle("is-visible", hasSelection);
+    quoteTab.setAttribute("aria-hidden", String(!hasSelection));
+    quoteTab.tabIndex = hasSelection ? 0 : -1;
+    document.body.classList.toggle("inventory-has-selection", hasSelection);
     renderPrintSummary(selectedProducts, amount, weight);
   }
 
@@ -444,9 +374,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   searchInput.addEventListener("input", filterProducts);
-  categoryTrigger.addEventListener("click", toggleCategoryMenu);
-  availabilityTrigger.addEventListener("click", toggleAvailabilityMenu);
-  document.addEventListener("click", closeMultiselectMenus);
+  categoryFilter.addEventListener("multiselectchange", filterProducts);
+  availabilityFilter.addEventListener("multiselectchange", filterProducts);
 
   resetButton.addEventListener("click", () => {
     rows.forEach(({ product, input }) => {
@@ -458,8 +387,13 @@ document.addEventListener("DOMContentLoaded", () => {
       input.value = product.inStock ? "1" : "0";
     });
     searchInput.value = "";
-    categoryFilter.value = "all";
-    availabilityFilter.value = "all";
+    [categoryFilter, availabilityFilter].forEach((filter) => {
+      filter.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.checked = true;
+      });
+      filter.querySelector('input[data-all-option="true"]')
+        .dispatchEvent(new Event("change", { bubbles: true }));
+    });
     filterProducts();
     updateSummary();
   });
@@ -469,7 +403,7 @@ document.addEventListener("DOMContentLoaded", () => {
     lightboxImage.src = src;
     lightboxImage.alt = activeGalleryProductName;
     lightboxCaption.textContent =
-      `${activeGalleryProductName} · ${activeGalleryIndex + 1} / ${activeGallery.length}`;
+      `${activeGalleryProductName} · ${activeGalleryIndex + 1}/${activeGallery.length}`;
     previousImageButton.hidden = activeGallery.length < 2;
     nextImageButton.hidden = activeGallery.length < 2;
   }

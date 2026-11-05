@@ -38,23 +38,6 @@ document.querySelectorAll('[data-purpose="pricing-row"]').forEach((row) => {
   }
 });
 
-// Homepage pricing rows filter
-const pricingRows = Array.from(document.querySelectorAll('[data-purpose="pricing-row"]'));
-if (pricingRows.length && homepageCategoryFilter) {
-  function applyHomepageCategoryFilter() {
-    const selected = Array.from(
-      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]:checked')
-    ).map((input) => input.value);
-    pricingRows.forEach((row) => {
-      const category = row.dataset.category || "";
-      const visible =
-        selected.length === 0 || selected.includes("all") || selected.includes(category);
-      row.hidden = !visible;
-    });
-  }
-  homepageCategoryFilter.addEventListener("change", applyHomepageCategoryFilter);
-}
-
 const mobileMenuToggle = document.querySelector(".mobile-menu-toggle");
 const mobileNavPanel = document.querySelector("#mobile-nav-panel");
 const mobileMenuBackdrop = document.querySelector(".mobile-menu-backdrop");
@@ -124,6 +107,159 @@ if (mobileMenuToggle && mobileNavPanel && mobileMenuBackdrop) {
 
   window.matchMedia("(min-width: 1024px)").addEventListener("change", (event) => {
     if (event.matches) setMobileMenuOpen(false);
+  });
+}
+
+document.querySelectorAll("[data-multiselect]").forEach((multiselect) => {
+  const trigger = multiselect.querySelector(".inventory-multiselect__trigger");
+  const menu = multiselect.querySelector(".inventory-multiselect__menu");
+  const summary = multiselect.querySelector(".inventory-multiselect__value");
+  const allOption = multiselect.querySelector("[data-all-option]");
+  const options = Array.from(
+    multiselect.querySelectorAll('input[type="checkbox"]:not([data-all-option="true"])'),
+  );
+  if (!trigger || !menu || !summary || !allOption) return;
+
+  const closeMenu = (restoreFocus = false) => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (restoreFocus) trigger.focus();
+  };
+
+  const updateSummary = () => {
+    const selected = options.filter((option) => option.checked);
+    if (selected.length === options.length) {
+      summary.textContent = allOption.dataset.filterLabel || allOption.value;
+    } else if (selected.length === 0) {
+      summary.textContent = "कोई चयन नहीं";
+    } else if (selected.length === 1) {
+      summary.textContent = selected[0].dataset.filterLabel || selected[0].value;
+    } else {
+      summary.textContent = `${selected.length} चुने हुए`;
+    }
+
+    multiselect.dispatchEvent(
+      new CustomEvent("multiselectchange", {
+        detail: { selected: selected.map((option) => option.value) },
+      }),
+    );
+  };
+
+  trigger.addEventListener("click", () => {
+    const opening = menu.hidden;
+    document.querySelectorAll(".inventory-multiselect__menu:not([hidden])").forEach((openMenu) => {
+      openMenu.hidden = true;
+      openMenu
+        .closest(".inventory-multiselect")
+        ?.querySelector(".inventory-multiselect__trigger")
+        ?.setAttribute("aria-expanded", "false");
+    });
+    menu.hidden = !opening;
+    trigger.setAttribute("aria-expanded", String(opening));
+  });
+
+  multiselect.addEventListener("change", (event) => {
+    if (!event.target.matches('input[type="checkbox"]')) return;
+    if (event.target === allOption) {
+      options.forEach((option) => {
+        option.checked = allOption.checked;
+      });
+    } else {
+      allOption.checked = options.every((option) => option.checked);
+    }
+    updateSummary();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!multiselect.contains(event.target) && !menu.hidden) closeMenu();
+  });
+
+  multiselect.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      event.preventDefault();
+      closeMenu(true);
+    }
+  });
+
+  updateSummary();
+});
+
+const homepageCategoryFilter = document.querySelector("#homepage-category-filter");
+if (homepageCategoryFilter) {
+  const homepagePriceRows = Array.from(
+    document.querySelectorAll('#pricing-table [data-purpose="pricing-row"]'),
+  );
+  const categoryMatchers = [
+    ["makhana", /मखाना|fox nuts/i],
+    ["cashew", /काजू|cashew/i],
+    ["almond", /बादाम|almond/i],
+    ["raisin", /किशमिश|raisin/i],
+    ["walnut", /अखरोट|walnut/i],
+  ];
+
+  homepagePriceRows.forEach((row) => {
+    const text = row.querySelector("td:nth-child(2)")?.textContent || "";
+    row.dataset.category =
+      categoryMatchers.find(([, matcher]) => matcher.test(text))?.[0] || "";
+  });
+
+  homepageCategoryFilter.addEventListener("multiselectchange", (event) => {
+    homepagePriceRows.forEach((row) => {
+      row.hidden = !event.detail.selected.includes(row.dataset.category);
+    });
+  });
+}
+
+const mainNavigation = document.querySelector(
+  'header[data-purpose="site-navigation"] nav[data-purpose="main-nav-links"]',
+);
+const mainNavigationLinks = Array.from(mainNavigation?.querySelectorAll('a[href*="#"]') || []);
+const isInventoryPage = /(?:^|\/)inventory\.html$/i.test(window.location.pathname);
+
+if (isInventoryPage) {
+  mainNavigationLinks.forEach((link) => {
+    link.classList.remove("is-active");
+    link.removeAttribute("aria-current");
+  });
+} else if (mainNavigationLinks.length && "IntersectionObserver" in window) {
+  const sectionLinks = mainNavigationLinks
+    .map((link) => ({ link, section: document.getElementById(new URL(link.href).hash.slice(1)) }))
+    .filter((entry) => entry.section);
+
+  const markActiveSection = (sectionId) => {
+    sectionLinks.forEach(({ link, section }) => {
+      const active = section.id === sectionId;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+  };
+
+  const sectionObserver = new IntersectionObserver(
+    (entries) => {
+      const visibleSections = entries.filter((entry) => entry.isIntersecting);
+      if (visibleSections.length) {
+        visibleSections.sort(
+          (left, right) =>
+            Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top),
+        );
+        markActiveSection(visibleSections[0].target.id);
+      }
+    },
+    { rootMargin: "-80px 0px -62% 0px", threshold: 0 },
+  );
+
+  sectionLinks.forEach(({ section }) => sectionObserver.observe(section));
+  const markActiveHash = () => {
+    const sectionId = window.location.hash.slice(1);
+    if (sectionLinks.some(({ section }) => section.id === sectionId)) {
+      markActiveSection(sectionId);
+    }
+  };
+  markActiveHash();
+  window.addEventListener("hashchange", markActiveHash);
+  mainNavigationLinks.forEach((link) => {
+    link.addEventListener("click", () => markActiveSection(new URL(link.href).hash.slice(1)));
   });
 }
 
@@ -284,6 +420,9 @@ if (salesBanner instanceof HTMLDialogElement && salesBannerClose) {
   };
 
   salesBannerClose.addEventListener("click", () => salesBanner.close());
+  salesBanner.addEventListener("click", (event) => {
+    if (event.target === salesBanner) salesBanner.close();
+  });
   salesBanner.addEventListener("close", () => {
     sessionStorage.setItem(salesBannerDismissedKey, "true");
   });
@@ -305,60 +444,4 @@ if (salesBanner instanceof HTMLDialogElement && salesBannerClose) {
       storyObserver.observe(storySection);
     }
   }
-}
-
-// Homepage multi-select category filter
-const homepageCategoryFilter = document.getElementById("homepage-category-filter-menu");
-const homepageCategoryTrigger = document.getElementById("homepage-category-filter-trigger");
-const homepageCategoryValue = document.getElementById("homepage-category-filter-value");
-
-if (homepageCategoryFilter && homepageCategoryTrigger && homepageCategoryValue) {
-  function toggleHomepageCategoryMenu() {
-    const isOpen = homepageCategoryFilter.hidden === false;
-    homepageCategoryFilter.hidden = !isOpen;
-    homepageCategoryTrigger.setAttribute("aria-expanded", String(!isOpen));
-  }
-
-  function closeHomepageCategoryMenu(event) {
-    if (
-      event.target.closest(".inventory-multiselect__menu") ||
-      event.target.closest(".inventory-multiselect__trigger")
-    )
-      return;
-    homepageCategoryFilter.hidden = true;
-    homepageCategoryTrigger.setAttribute("aria-expanded", "false");
-  }
-
-  homepageCategoryTrigger.addEventListener("click", toggleHomepageCategoryMenu);
-  document.addEventListener("click", closeHomepageCategoryMenu);
-
-  homepageCategoryFilter.addEventListener("change", (event) => {
-    const target = event.target;
-    if (target.dataset.allOption === "true") {
-      const allChecked = target.checked;
-      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.checked = allChecked;
-      });
-    } else {
-      const allCheckbox = homepageCategoryFilter.querySelector('input[data-all-option="true"]');
-      const individualCheckboxes = homepageCategoryFilter.querySelectorAll(
-        'input[type="checkbox"]:not([data-all-option="true"])'
-      );
-      if (!target.checked) {
-        allCheckbox.checked = false;
-      } else if (Array.from(individualCheckboxes).every((cb) => cb.checked)) {
-        allCheckbox.checked = true;
-      }
-    }
-    const selected = Array.from(
-      homepageCategoryFilter.querySelectorAll('input[type="checkbox"]:checked')
-    ).map((input) => input.value);
-    if (selected.length === 0 || selected.includes("all")) {
-      homepageCategoryValue.textContent = "सभी उत्पाद";
-    } else if (selected.length === 1) {
-      homepageCategoryValue.textContent = selected[0];
-    } else {
-      homepageCategoryValue.textContent = `${selected.length} चुने हुए`;
-    }
-  });
 }
