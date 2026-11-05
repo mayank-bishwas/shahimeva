@@ -16,14 +16,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const nextImageButton = document.querySelector(".lightbox-next");
   const rowStates = new Map();
   const rows = [];
+  const screenshotToast = document.querySelector("#screenshot-toast");
   let activeGallery = [];
   let activeGalleryIndex = 0;
   let activeGalleryProductName = "";
   let pointerStartX = null;
+  let screenshotInProgress = false;
+  let screenshotToastTimer;
 
   if (!Array.isArray(products) || !tableBody || !searchInput || !categoryFilter ||
       !availabilityFilter || !quoteTab || !inventoryWhatsApp || !resetButton || !noResults ||
-      !printSummary || !(lightbox instanceof HTMLDialogElement) || !lightboxImage ||
+      !printSummary || !screenshotToast || !(lightbox instanceof HTMLDialogElement) || !lightboxImage ||
       !lightboxCaption || !previousImageButton || !nextImageButton) {
     throw new Error("Inventory page is missing required data or controls.");
   }
@@ -463,8 +466,202 @@ document.addEventListener("DOMContentLoaded", () => {
     closeGallery();
   });
 
-  document.querySelectorAll("[data-print]").forEach((button) => {
-    button.addEventListener("click", () => window.print());
+  function showScreenshotToast(message, isError = false) {
+    window.clearTimeout(screenshotToastTimer);
+    screenshotToast.replaceChildren();
+    screenshotToast.classList.toggle("is-error", isError);
+    screenshotToast.setAttribute("role", isError ? "alert" : "status");
+
+    const icon = document.createElement("span");
+    icon.className = "screenshot-toast-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = isError ? "!" : "✓";
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    screenshotToast.append(icon, text);
+    screenshotToast.hidden = false;
+    screenshotToastTimer = window.setTimeout(() => {
+      screenshotToast.hidden = true;
+    }, isError ? 5000 : 3500);
+  }
+
+  async function waitForScreenshotAssets() {
+    if (document.fonts?.ready) await document.fonts.ready;
+
+    const imageSources = Array.from(
+      new Set(Array.from(document.images, (image) => image.currentSrc || image.src).filter(Boolean)),
+    );
+    await Promise.all(imageSources.map((source) => new Promise((resolve, reject) => {
+      const image = new Image();
+      const decode = () => {
+        if (!image.naturalWidth) {
+          reject(new Error(`Could not load screenshot image: ${source}`));
+          return;
+        }
+        if (typeof image.decode === "function") {
+          image.decode().then(resolve, reject);
+        } else {
+          resolve();
+        }
+      };
+
+      image.onload = decode;
+      image.onerror = () => reject(new Error(`Could not load screenshot image: ${source}`));
+      image.src = source;
+      if (image.complete) decode();
+    })));
+  }
+
+  async function downloadInventoryScreenshot() {
+    if (screenshotInProgress) return;
+    screenshotInProgress = true;
+    const originalScrollY = window.scrollY;
+
+    try {
+      if (window.innerWidth < 1024) {
+        throw new Error("कृपया screenshot लेने के लिए desktop viewport का उपयोग करें।");
+      }
+      if (typeof window.html2canvas !== "function") {
+        throw new Error("Screenshot सुविधा लोड नहीं हो सकी।");
+      }
+
+      await waitForScreenshotAssets();
+      const pageWidth = document.documentElement.scrollWidth;
+      const viewportHeight = window.innerHeight;
+      const currentScrollY = window.scrollY;
+      const hasSelection = Array.from(rowStates.values()).some((state) => state.selected);
+      const canvas = await window.html2canvas(document.documentElement, {
+        backgroundColor: null,
+        scale: 2,
+        scrollX: 0,
+        scrollY: 0,
+        useCORS: true,
+        width: pageWidth,
+        windowHeight: viewportHeight,
+        windowWidth: window.innerWidth,
+        onclone: (clonedDocument) => {
+          const clonedHeader = clonedDocument.querySelector(
+            'header[data-purpose="site-navigation"]',
+          );
+          if (clonedHeader) {
+            clonedHeader.style.position = "absolute";
+            clonedHeader.style.top = "0";
+            clonedHeader.style.zIndex = "auto";
+
+            const clonedNavigation = clonedHeader.querySelector(
+              '[data-purpose="main-nav-links"]',
+            );
+            if (clonedNavigation) clonedNavigation.remove();
+
+            const clonedHeaderActions = clonedHeader.querySelector(".header-actions");
+            if (clonedHeaderActions) {
+              clonedHeaderActions.style.flex = "1";
+              clonedHeaderActions.style.minWidth = "0";
+
+              const stockButton = clonedHeaderActions.querySelector(".header-stock-cta");
+              const whatsappButton = clonedHeaderActions.querySelector(
+                '[data-purpose="header-whatsapp-cta"]',
+              );
+              for (const button of [stockButton, whatsappButton]) {
+                if (button) {
+                  button.style.flex = "1 1 0";
+                  button.style.minWidth = "0";
+                  button.style.justifyContent = "center";
+                }
+              }
+
+              const stockLabel = stockButton?.querySelector("span");
+              if (stockLabel) stockLabel.textContent = "shahimeva.com";
+
+              const whatsappLabel = whatsappButton?.querySelector("span");
+              if (whatsappLabel) whatsappLabel.textContent = "87573 46644";
+
+              clonedHeaderActions.querySelector(".mobile-menu-toggle")?.remove();
+            }
+          }
+
+          const clonedTableHeader = clonedDocument.querySelector(".inventory-table thead");
+          if (clonedTableHeader) clonedTableHeader.style.position = "static";
+
+          clonedDocument.querySelectorAll(".product-row").forEach((row) => {
+            const quantityCell = row.querySelector(".inventory-quantity");
+            const state = rowStates.get(row.dataset.sku);
+            const quantity = state?.selected ? String(state.quantity) : "";
+            if (!quantityCell) return;
+
+            row.hidden = false;
+            quantityCell.querySelector(".quantity-control")?.remove();
+            quantityCell.querySelector(".bulk-enquiry")?.remove();
+
+            const selectedQuantity = clonedDocument.createElement("span");
+            selectedQuantity.className = "screenshot-quantity";
+            selectedQuantity.textContent = quantity;
+            quantityCell.prepend(selectedQuantity);
+          });
+          const clonedNoResults = clonedDocument.querySelector("#no-results");
+          if (clonedNoResults) clonedNoResults.hidden = true;
+
+          const clonedInventoryWhatsApp = clonedDocument.querySelector("#inventory-whatsapp");
+          const clonedInventoryWhatsAppLabel = clonedInventoryWhatsApp?.querySelector("span");
+          if (clonedInventoryWhatsAppLabel) {
+            clonedInventoryWhatsAppLabel.replaceChildren("87573 46644");
+          }
+
+          const clonedQuoteTab = clonedDocument.querySelector("#whatsapp-cta-btn.is-visible");
+          if (clonedQuoteTab) {
+            const quoteHeight = clonedQuoteTab.getBoundingClientRect().height;
+            clonedQuoteTab.style.position = "absolute";
+            clonedQuoteTab.style.top =
+              `${Math.max(0, currentScrollY + viewportHeight - quoteHeight - 16)}px`;
+            clonedQuoteTab.style.right = "auto";
+            clonedQuoteTab.style.bottom = "auto";
+            clonedQuoteTab.style.left = "1rem";
+          }
+
+          const clonedToast = clonedDocument.querySelector("#screenshot-toast");
+          if (clonedToast) clonedToast.hidden = true;
+
+          clonedDocument.querySelector("#inventory-lightbox")?.remove();
+          clonedDocument.querySelector(".sales-banner-dialog")?.remove();
+        },
+      });
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((result) => {
+          if (result && result.type === "image/png" && result.size > 0) {
+            resolve(result);
+          } else {
+            reject(new Error("PNG image could not be created."));
+          }
+        }, "image/png");
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      downloadLink.href = downloadUrl;
+      downloadLink.download = hasSelection
+        ? "Shahi-Meva-Selected-Stock.png"
+        : "Shahi-Meva-Full-Stock.png";
+      downloadLink.hidden = true;
+      document.body.append(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      showScreenshotToast("Screenshot सफलतापूर्वक डाउनलोड हो गया!");
+    } catch (error) {
+      console.error("Could not capture or download the inventory screenshot:", error);
+      showScreenshotToast(
+        error instanceof Error ? error.message : "Screenshot डाउनलोड नहीं हो सका।",
+        true,
+      );
+    } finally {
+      window.scrollTo({ top: originalScrollY, behavior: "instant" });
+      screenshotInProgress = false;
+    }
+  }
+
+  document.querySelectorAll("[data-screenshot]").forEach((button) => {
+    button.addEventListener("click", downloadInventoryScreenshot);
   });
 
   updateSummary();
