@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const products = window.shahiMevaInventoryData;
   const tableBody = document.querySelector("#table-rows-container");
+  const mobileProducts = document.querySelector("#inventory-mobile-products");
   const searchInput = document.querySelector("#product-search");
   const categoryFilter = document.querySelector("#category-filter");
   const availabilityFilter = document.querySelector("#availability-filter");
@@ -24,15 +25,21 @@ document.addEventListener("DOMContentLoaded", () => {
   let screenshotInProgress = false;
   let screenshotToastTimer;
 
-  if (!Array.isArray(products) || !tableBody || !searchInput || !categoryFilter ||
-      !availabilityFilter || !quoteTab || !inventoryWhatsApp || !resetButton || !noResults ||
-      !printSummary || !screenshotToast || !(lightbox instanceof HTMLDialogElement) || !lightboxImage ||
-      !lightboxCaption || !previousImageButton || !nextImageButton) {
+  if (
+    !Array.isArray(products) || !tableBody || !mobileProducts || !searchInput || !categoryFilter ||
+    !availabilityFilter || !quoteTab || !inventoryWhatsApp || !resetButton || !noResults ||
+    !printSummary || !screenshotToast || !(lightbox instanceof HTMLDialogElement) || !lightboxImage ||
+    !lightboxCaption || !previousImageButton || !nextImageButton
+  ) {
     throw new Error("Inventory page is missing required data or controls.");
   }
 
   const formatMoney = (amount) => `₹${amount.toLocaleString("en-IN")}`;
   const formatWeight = (weight) => `${Number.isInteger(weight) ? weight : weight.toFixed(1)} kg`;
+  const calculateLineTotal = (product, quantity) =>
+    product.inStock && Number.isInteger(quantity) && quantity > 0
+      ? product.price * quantity
+      : 0;
   const whatsappUrl = (message) =>
     `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(message)}`;
   const generalEnquiryUrl = whatsappUrl(
@@ -70,6 +77,59 @@ document.addEventListener("DOMContentLoaded", () => {
     return bulkMessage;
   }
 
+  function makeQuantityControl(product) {
+    const control = document.createElement("div");
+    control.className = "quantity-control";
+
+    const decrement = document.createElement("button");
+    decrement.type = "button";
+    decrement.dataset.quantityAction = "decrement";
+    decrement.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा घटाएँ`);
+    decrement.textContent = "−";
+    decrement.disabled = !product.inStock;
+
+    const input = document.createElement("input");
+    input.className = "qty-input";
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.min = product.inStock ? "1" : "0";
+    input.max = "99";
+    input.step = "1";
+    input.value = "";
+    input.disabled = !product.inStock;
+    input.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा`);
+
+    const increment = document.createElement("button");
+    increment.type = "button";
+    increment.dataset.quantityAction = "increment";
+    increment.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा बढ़ाएँ`);
+    increment.textContent = "+";
+    increment.disabled = !product.inStock;
+
+    control.append(decrement, input, increment);
+    return { control, input };
+  }
+
+  function makePriceCell(product, className = "") {
+    const priceCell = document.createElement("div");
+    priceCell.className = `inventory-price ${className}`.trim();
+
+    const unitPrice = document.createElement("span");
+    unitPrice.className = "unit-price";
+    unitPrice.textContent = formatMoney(product.price);
+
+    const perPack = document.createElement("span");
+    perPack.className = "inventory-unit-price";
+    perPack.textContent = "प्रति पैक";
+
+    const lineTotal = document.createElement("strong");
+    lineTotal.className = "line-total";
+    lineTotal.hidden = true;
+
+    priceCell.append(unitPrice, perPack, lineTotal);
+    return { priceCell, unitPrice, perPack, lineTotal };
+  }
+
   function renderProduct(product) {
     const row = document.createElement("tr");
     row.className = product.inStock ? "product-row" : "product-row is-out-of-stock";
@@ -85,7 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
       product.pack,
     ].join(" ").toLocaleLowerCase("hi-IN");
 
-    rowStates.set(product.sku, { quantity: product.inStock ? 1 : 0, selected: false });
+    rowStates.set(product.sku, { quantity: null, selected: false });
     row.append(makeCell("inventory-sku", product.sku));
 
     const imageCell = makeCell("inventory-image-cell");
@@ -128,53 +188,21 @@ document.addEventListener("DOMContentLoaded", () => {
     row.append(packCell);
 
     const quantityCell = makeCell("inventory-quantity");
-    const quantityControl = document.createElement("div");
-    quantityControl.className = "quantity-control";
-
-    const decrement = document.createElement("button");
-    decrement.type = "button";
-    decrement.dataset.quantityAction = "decrement";
-    decrement.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा घटाएँ`);
-    decrement.textContent = "−";
-    decrement.disabled = !product.inStock;
-
-    const input = document.createElement("input");
-    input.className = "qty-input";
-    input.type = "number";
-    input.inputMode = "numeric";
-    input.min = product.inStock ? "1" : "0";
-    input.max = "99";
-    input.step = "1";
-    input.value = product.inStock ? "1" : "0";
-    input.disabled = !product.inStock;
-    input.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा`);
+    const { control: quantityControl, input } = makeQuantityControl(product);
 
     const printQuantity = document.createElement("span");
     printQuantity.className = "print-quantity";
     printQuantity.textContent = product.inStock ? "—" : "स्टॉक में नहीं";
 
-    const increment = document.createElement("button");
-    increment.type = "button";
-    increment.dataset.quantityAction = "increment";
-    increment.setAttribute("aria-label", `${product.name}, ${product.pack} की मात्रा बढ़ाएँ`);
-    increment.textContent = "+";
-    increment.disabled = !product.inStock;
-
-    quantityControl.append(decrement, input, increment);
     quantityCell.append(quantityControl, printQuantity);
     const bulkMessage = makeBulkMessage(product, quantityCell);
     row.append(quantityCell);
 
-    const priceCell = makeCell("inventory-price");
-    const price = document.createElement("span");
-    price.className = "unit-price";
-    price.textContent = formatMoney(product.price);
-    priceCell.append(price);
-    const unitPrice = document.createElement("span");
-    unitPrice.className = "inventory-unit-price";
-    unitPrice.textContent = "प्रति पैक";
-    priceCell.append(unitPrice);
-    row.append(priceCell);
+    const { priceCell } = makePriceCell(product);
+    const tablePriceCell = makeCell("inventory-price");
+    tablePriceCell.append(...priceCell.childNodes);
+    const tableLineTotal = tablePriceCell.querySelector(".line-total");
+    row.append(tablePriceCell);
 
     const galleryImages = Array.isArray(product.images) && product.images.length
       ? product.images
@@ -182,7 +210,107 @@ document.addEventListener("DOMContentLoaded", () => {
     thumbnail.dataset.gallerySku = product.sku;
 
     tableBody.append(row);
-    rows.push({ element: row, product, input, printQuantity, bulkMessage, galleryImages });
+    const card = document.createElement("article");
+    card.className = `inventory-mobile-card${product.inStock ? "" : " is-out-of-stock"}`;
+    card.dataset.sku = product.sku;
+    card.dataset.category = product.category;
+    card.dataset.inStock = String(product.inStock);
+    card.dataset.search = row.dataset.search;
+
+    const cardTop = document.createElement("div");
+    cardTop.className = "inventory-mobile-card-top";
+    const cardThumbnail = document.createElement("button");
+    cardThumbnail.type = "button";
+    cardThumbnail.className = "inventory-image-button inventory-mobile-image-button";
+    cardThumbnail.dataset.gallerySku = product.sku;
+    cardThumbnail.setAttribute("aria-label", `${product.name} की तस्वीर बड़ी करके देखें`);
+    const cardImage = document.createElement("img");
+    cardImage.className = "inventory-product-image";
+    cardImage.src = product.image;
+    cardImage.alt = product.name;
+    cardImage.loading = "lazy";
+    cardThumbnail.append(cardImage);
+
+    const cardInfo = document.createElement("div");
+    cardInfo.className = "inventory-mobile-card-info";
+    const cardTitle = document.createElement("div");
+    cardTitle.className = "inventory-mobile-card-title";
+    const skuBadge = document.createElement("span");
+    skuBadge.className = "inventory-mobile-sku";
+    skuBadge.textContent = product.sku;
+    const cardName = document.createElement("span");
+    cardName.className = "inventory-product-name";
+    cardName.textContent = product.name;
+    cardTitle.append(skuBadge, cardName);
+
+    const descriptionWrap = document.createElement("div");
+    descriptionWrap.className = "inventory-mobile-description-wrap";
+    const cardDescription = document.createElement("p");
+    cardDescription.className = "inventory-product-description is-collapsed";
+    cardDescription.textContent = product.description;
+    const descriptionToggle = document.createElement("button");
+    descriptionToggle.type = "button";
+    descriptionToggle.className = "inventory-description-toggle";
+    descriptionToggle.setAttribute("aria-label", `${product.name} का पूरा विवरण दिखाएँ`);
+    descriptionToggle.setAttribute("aria-expanded", "false");
+    descriptionToggle.textContent = "⌄";
+    descriptionToggle.hidden = true;
+    descriptionWrap.append(cardDescription, descriptionToggle);
+    cardInfo.append(cardTitle, descriptionWrap);
+
+    if (!product.inStock) {
+      const cardStockStatus = document.createElement("span");
+      cardStockStatus.className = "inventory-stock-status is-out";
+      cardStockStatus.textContent = "स्टॉक में नहीं";
+      cardInfo.append(cardStockStatus);
+    }
+
+    cardTop.append(cardThumbnail, cardInfo);
+    const cardFooter = document.createElement("div");
+    cardFooter.className = "inventory-mobile-card-footer";
+    const cardPack = document.createElement("span");
+    cardPack.className = "inventory-mobile-pack";
+    cardPack.textContent = product.pack;
+    const cardQuantity = document.createElement("div");
+    cardQuantity.className = "inventory-mobile-quantity";
+    const { control: cardQuantityControl, input: cardInput } = makeQuantityControl(product);
+    cardQuantity.append(cardQuantityControl);
+    const cardBulkMessage = makeBulkMessage(product, cardQuantity);
+    const cardPrice = makePriceCell(product, "inventory-mobile-price");
+    cardFooter.append(cardPack, cardQuantity, cardPrice.priceCell);
+    card.append(cardTop, cardFooter);
+    mobileProducts.append(card);
+
+    const resizeObserver = new ResizeObserver(() => {
+      const expanded = cardDescription.classList.contains("is-expanded");
+      cardDescription.classList.remove("is-collapsed", "is-expanded");
+      const fullHeight = cardDescription.scrollHeight;
+      cardDescription.classList.add("is-collapsed");
+      const collapsedHeight = cardDescription.clientHeight;
+      cardDescription.classList.toggle("is-expanded", expanded);
+      cardDescription.classList.toggle("is-collapsed", !expanded);
+      descriptionToggle.hidden = fullHeight <= collapsedHeight + 1 && !expanded;
+    });
+    resizeObserver.observe(cardDescription);
+    document.fonts?.ready.then(() => resizeObserver.observe(cardDescription));
+
+    rows.push({
+      element: row,
+      card,
+      product,
+      input,
+      cardInput,
+      inputs: [input, cardInput],
+      printQuantity,
+      bulkMessage,
+      cardBulkMessage,
+      lineTotals: [tableLineTotal, cardPrice.lineTotal],
+      unitPrices: [tablePriceCell.querySelector(".unit-price"), cardPrice.unitPrice],
+      perPackLabels: [tablePriceCell.querySelector(".inventory-unit-price"), cardPrice.perPack],
+      priceCells: [tablePriceCell, cardPrice.priceCell],
+      quantityControls: [quantityControl, cardQuantityControl],
+      galleryImages,
+    });
   }
 
   products.forEach(renderProduct);
@@ -201,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const availability = getSelectedValues(availabilityFilter);
     let visibleCount = 0;
 
-    rows.forEach(({ element, product }) => {
+    rows.forEach(({ element, card, product }) => {
       const matchesQuery = !query || element.dataset.search.includes(query);
       const matchesCategory = categories.includes(product.category);
       const matchesAvailability =
@@ -210,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const visible = matchesQuery && matchesCategory && matchesAvailability;
 
       element.hidden = !visible;
+      card.hidden = !visible;
       if (visible) visibleCount += 1;
     });
 
@@ -245,43 +374,39 @@ document.addEventListener("DOMContentLoaded", () => {
     printSummary.append(total);
   }
 
-  function updateSummary() {
+  function getSelectionSummary(states = rowStates) {
     let weight = 0;
     let amount = 0;
     let selectedQuantity = 0;
     const selectedProducts = [];
 
-    rows.forEach(({ element, product, input, printQuantity, bulkMessage }) => {
-      const state = rowStates.get(product.sku);
-      const quantity = state.selected ? state.quantity : 0;
-      const lineTotal = quantity * product.price;
+    rows.forEach(({ product }) => {
+      const state = states.get(product.sku);
+      if (
+        !state?.selected ||
+        !product.inStock ||
+        !Number.isInteger(state.quantity) ||
+        state.quantity < 1
+      ) return;
 
-      element.classList.toggle("is-selected", state.selected);
-      input.classList.toggle("is-selected", state.selected);
-      printQuantity.textContent = state.selected ? String(quantity) : "—";
-      element.querySelectorAll(".quantity-control button").forEach((button) => {
-        button.disabled = !product.inStock || !state.selected && button.dataset.quantityAction === "decrement";
-      });
-
-      if (state.selected) {
-        weight += quantity * product.weight;
-        amount += lineTotal;
-        selectedQuantity += quantity;
-        selectedProducts.push({ product, quantity, lineTotal });
-      }
-
-      element.dataset.selected = String(state.selected);
-      bulkMessage.hidden = !state.overLimit;
+      const lineTotal = calculateLineTotal(product, state.quantity);
+      weight += state.quantity * product.weight;
+      amount += lineTotal;
+      selectedQuantity += state.quantity;
+      selectedProducts.push({ product, quantity: state.quantity, lineTotal });
     });
 
-    const hasSelection = selectedProducts.length > 0;
-    const formattedWeight = formatWeight(weight);
-    document.querySelector("#total-weight").textContent = formattedWeight;
-    document.querySelector("#total-quantity").textContent = String(selectedQuantity);
-    document.querySelector("#total-item-label").textContent = selectedQuantity === 1 ? "item" : "items";
-    document.querySelector("#total-amount").textContent = formatMoney(amount);
+    return {
+      weight,
+      amount,
+      selectedQuantity,
+      selectedProducts,
+      hasSelection: selectedProducts.length > 0,
+    };
+  }
 
-    const quotationMessage = [
+  function buildQuotationMessage({ selectedProducts, amount, weight }) {
+    return [
       "नमस्ते शाही मेवा,",
       "",
       "मुझे आपसे निम्नलिखित सामान के लिए कीमत और उपलब्धता की पुष्टि करनी है:",
@@ -291,10 +416,75 @@ document.addEventListener("DOMContentLoaded", () => {
       ),
       "",
       `*कुल अनुमानित राशि: ${formatMoney(amount)}*`,
-      `_कुल वजन: ${formattedWeight}_`,
+      `_कुल वजन: ${formatWeight(weight)}_`,
       "",
       "धन्यवाद।",
     ].join("\n");
+  }
+
+  function updateSummary() {
+    const summary = getSelectionSummary();
+    const { weight, amount, selectedQuantity, selectedProducts, hasSelection } = summary;
+
+    rows.forEach(({
+      element,
+      card,
+      product,
+      inputs,
+      printQuantity,
+      bulkMessage,
+      cardBulkMessage,
+      lineTotals,
+      unitPrices,
+      perPackLabels,
+      priceCells,
+      quantityControls,
+    }) => {
+      const state = rowStates.get(product.sku);
+      const selected =
+        state.selected && Number.isInteger(state.quantity) && state.quantity >= 1;
+      const quantity = selected ? state.quantity : null;
+      const lineTotal = calculateLineTotal(product, quantity);
+
+      element.classList.toggle("is-selected", selected);
+      card.classList.toggle("is-selected", selected);
+      inputs.forEach((input) => {
+        input.value = quantity === null ? "" : String(quantity);
+        input.classList.toggle("is-selected", selected);
+      });
+      printQuantity.textContent = selected ? String(quantity) : "";
+      quantityControls.forEach((control) => {
+        control.querySelectorAll("button").forEach((button) => {
+          button.disabled =
+            !product.inStock ||
+            (!selected && button.dataset.quantityAction === "decrement");
+        });
+      });
+      priceCells.forEach((priceCell) => priceCell.classList.toggle("has-selection", selected));
+      lineTotals.forEach((total) => {
+        total.textContent = formatMoney(lineTotal);
+        total.hidden = !selected;
+      });
+      unitPrices.forEach((price) => {
+        price.hidden = selected;
+      });
+      perPackLabels.forEach((label) => {
+        label.hidden = selected;
+      });
+
+      element.dataset.selected = String(selected);
+      card.dataset.selected = String(selected);
+      bulkMessage.hidden = !state.overLimit;
+      cardBulkMessage.hidden = !state.overLimit;
+    });
+
+    const formattedWeight = formatWeight(weight);
+    document.querySelector("#total-weight").textContent = formattedWeight;
+    document.querySelector("#total-quantity").textContent = String(selectedQuantity);
+    document.querySelector("#total-item-label").textContent = selectedQuantity === 1 ? "item" : "items";
+    document.querySelector("#total-amount").textContent = formatMoney(amount);
+
+    const quotationMessage = buildQuotationMessage(summary);
     const enquiryUrl = hasSelection ? whatsappUrl(quotationMessage) : generalEnquiryUrl;
     quoteTab.href = enquiryUrl;
     inventoryWhatsApp.href = enquiryUrl;
@@ -310,70 +500,88 @@ document.addEventListener("DOMContentLoaded", () => {
     state.selected = product.inStock && selected;
     state.quantity = state.selected
       ? Math.min(99, Math.max(1, Math.floor(quantity)))
-      : product.inStock ? 1 : 0;
+      : null;
     state.overLimit = overLimit;
-    const input = rows.find((row) => row.product.sku === product.sku)?.input;
-    if (input) input.value = String(state.quantity);
     updateSummary();
   }
 
-  tableBody.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-quantity-action]");
-    if (button) {
-      const row = button.closest(".product-row");
-      const rowEntry = rows.find((entry) => entry.element === row);
-      if (!rowEntry || !rowEntry.product.inStock) return;
-      const state = rowStates.get(rowEntry.product.sku);
-      const action = button.dataset.quantityAction;
-
-      if (action === "increment") {
-        if (state.quantity >= 99 && state.selected) {
-          setProductState(rowEntry.product, 99, true, true);
-        } else {
-          setProductState(
-            rowEntry.product,
-            state.selected ? state.quantity + 1 : 1,
-            true,
+  [tableBody, mobileProducts].forEach((container) => {
+    container.addEventListener("click", (event) => {
+      const descriptionToggle = event.target.closest(".inventory-description-toggle");
+      if (descriptionToggle) {
+        const card = descriptionToggle.closest(".inventory-mobile-card");
+        const description = card?.querySelector(".inventory-product-description");
+        if (description) {
+          const expanded = description.classList.toggle("is-expanded");
+          description.classList.toggle("is-collapsed", !expanded);
+          descriptionToggle.setAttribute("aria-expanded", String(expanded));
+          descriptionToggle.setAttribute(
+            "aria-label",
+            expanded ? "पूरा विवरण संक्षिप्त करें" : "पूरा विवरण दिखाएँ",
           );
+          descriptionToggle.textContent = expanded ? "⌃" : "⌄";
         }
-      } else if (state.selected && state.quantity === 1) {
-        setProductState(rowEntry.product, 1, false);
-      } else if (state.selected) {
-        setProductState(rowEntry.product, state.quantity - 1, true);
+        return;
       }
-      return;
-    }
 
-    const imageButton = event.target.closest("[data-gallery-sku]");
-    if (imageButton) {
-      const rowEntry = rows.find((entry) => entry.product.sku === imageButton.dataset.gallerySku);
-      if (rowEntry) openGallery(rowEntry);
-    }
-  });
+      const button = event.target.closest("button[data-quantity-action]");
+      if (button) {
+        const row = button.closest(".product-row, .inventory-mobile-card");
+        const rowEntry = rows.find((entry) => entry.product.sku === row?.dataset.sku);
+        if (!rowEntry || !rowEntry.product.inStock) return;
+        const state = rowStates.get(rowEntry.product.sku);
+        const action = button.dataset.quantityAction;
 
-  tableBody.addEventListener("input", (event) => {
-    if (!event.target.matches(".qty-input")) return;
-    const row = event.target.closest(".product-row");
-    const rowEntry = rows.find((entry) => entry.element === row);
-    if (!rowEntry || !rowEntry.product.inStock) return;
+        if (action === "increment") {
+          if (state.quantity >= 99 && state.selected) {
+            setProductState(rowEntry.product, 99, true, true);
+          } else {
+            setProductState(
+              rowEntry.product,
+              state.selected ? state.quantity + 1 : 1,
+              true,
+            );
+          }
+        } else if (state.selected && state.quantity === 1) {
+          setProductState(rowEntry.product, 1, false);
+        } else if (state.selected) {
+          setProductState(rowEntry.product, state.quantity - 1, true);
+        }
+        return;
+      }
 
-    const typed = event.target.value.trim();
-    const quantity = Number(typed);
-    if (!typed || quantity < 1) {
-      setProductState(rowEntry.product, 1, false);
-    } else if (quantity > 99) {
-      setProductState(rowEntry.product, 99, true, true);
-    } else {
-      setProductState(rowEntry.product, quantity, true);
-    }
-  });
+      const imageButton = event.target.closest("[data-gallery-sku]");
+      if (imageButton) {
+        const rowEntry = rows.find((entry) => entry.product.sku === imageButton.dataset.gallerySku);
+        if (rowEntry) openGallery(rowEntry);
+      }
+    });
 
-  tableBody.addEventListener("change", (event) => {
-    if (!event.target.matches(".qty-input")) return;
-    const rowEntry = rows.find((entry) => entry.element === event.target.closest(".product-row"));
-    if (!rowEntry) return;
-    const state = rowStates.get(rowEntry.product.sku);
-    event.target.value = String(state.quantity);
+    container.addEventListener("input", (event) => {
+      if (!event.target.matches(".qty-input")) return;
+      const row = event.target.closest(".product-row, .inventory-mobile-card");
+      const rowEntry = rows.find((entry) => entry.product.sku === row?.dataset.sku);
+      if (!rowEntry || !rowEntry.product.inStock) return;
+
+      const typed = event.target.value.trim();
+      const quantity = Number(typed);
+      if (!typed || quantity < 1) {
+        setProductState(rowEntry.product, 1, false);
+      } else if (quantity > 99) {
+        setProductState(rowEntry.product, 99, true, true);
+      } else {
+        setProductState(rowEntry.product, quantity, true);
+      }
+    });
+
+    container.addEventListener("change", (event) => {
+      if (!event.target.matches(".qty-input")) return;
+      const row = event.target.closest(".product-row, .inventory-mobile-card");
+      const rowEntry = rows.find((entry) => entry.product.sku === row?.dataset.sku);
+      if (!rowEntry) return;
+      const quantity = rowStates.get(rowEntry.product.sku).quantity;
+      event.target.value = quantity === null ? "" : String(quantity);
+    });
   });
 
   searchInput.addEventListener("input", filterProducts);
@@ -381,13 +589,15 @@ document.addEventListener("DOMContentLoaded", () => {
   availabilityFilter.addEventListener("multiselectchange", filterProducts);
 
   resetButton.addEventListener("click", () => {
-    rows.forEach(({ product, input }) => {
+    rows.forEach(({ product, inputs }) => {
       rowStates.set(product.sku, {
-        quantity: product.inStock ? 1 : 0,
+        quantity: null,
         selected: false,
         overLimit: false,
       });
-      input.value = product.inStock ? "1" : "0";
+      inputs.forEach((input) => {
+        input.value = "";
+      });
     });
     searchInput.value = "";
     [categoryFilter, availabilityFilter].forEach((filter) => {
@@ -486,31 +696,64 @@ document.addEventListener("DOMContentLoaded", () => {
     }, isError ? 5000 : 3500);
   }
 
+  function waitForScreenshotAsset(promise, message) {
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(
+        () => reject(new Error(message)),
+        15000,
+      );
+      promise.then(
+        (value) => {
+          window.clearTimeout(timeout);
+          resolve(value);
+        },
+        (error) => {
+          window.clearTimeout(timeout);
+          reject(error);
+        },
+      );
+    });
+  }
+
   async function waitForScreenshotAssets() {
-    if (document.fonts?.ready) await document.fonts.ready;
+    if (document.fonts?.ready) {
+      await waitForScreenshotAsset(
+        document.fonts.ready,
+        "Screenshot तैयार करने में फ़ॉन्ट लोड नहीं हो पाए।",
+      );
+    }
 
     const imageSources = Array.from(
       new Set(Array.from(document.images, (image) => image.currentSrc || image.src).filter(Boolean)),
     );
-    await Promise.all(imageSources.map((source) => new Promise((resolve, reject) => {
-      const image = new Image();
-      const decode = () => {
-        if (!image.naturalWidth) {
-          reject(new Error(`Could not load screenshot image: ${source}`));
-          return;
-        }
-        if (typeof image.decode === "function") {
-          image.decode().then(resolve, reject);
-        } else {
-          resolve();
-        }
-      };
+    await Promise.all(imageSources.map((source) => {
+      const imageLoad = new Promise((resolve, reject) => {
+        const image = new Image();
+        const decode = () => {
+          if (!image.naturalWidth) {
+            reject(new Error(`Could not load screenshot image: ${source}`));
+            return;
+          }
+          if (typeof image.decode === "function") {
+            image.decode().then(
+              resolve,
+              () => reject(new Error(`Could not decode screenshot image: ${source}`)),
+            );
+          } else {
+            resolve();
+          }
+        };
 
-      image.onload = decode;
-      image.onerror = () => reject(new Error(`Could not load screenshot image: ${source}`));
-      image.src = source;
-      if (image.complete) decode();
-    })));
+        image.onload = decode;
+        image.onerror = () => reject(new Error(`Could not load screenshot image: ${source}`));
+        image.src = source;
+        if (image.complete) decode();
+      });
+      return waitForScreenshotAsset(
+        imageLoad,
+        `Timed out loading screenshot image: ${source}`,
+      );
+    }));
   }
 
   async function downloadInventoryScreenshot() {
@@ -519,18 +762,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const originalScrollY = window.scrollY;
 
     try {
-      if (window.innerWidth < 1024) {
-        throw new Error("कृपया screenshot लेने के लिए desktop viewport का उपयोग करें।");
-      }
       if (typeof window.html2canvas !== "function") {
         throw new Error("Screenshot सुविधा लोड नहीं हो सकी।");
       }
 
       await waitForScreenshotAssets();
+      const selectionSnapshot = new Map(
+        rows.map(({ product }) => [product.sku, { ...rowStates.get(product.sku) }]),
+      );
+      const screenshotSummary = getSelectionSummary(selectionSnapshot);
       const pageWidth = document.documentElement.scrollWidth;
       const viewportHeight = window.innerHeight;
       const currentScrollY = window.scrollY;
-      const hasSelection = Array.from(rowStates.values()).some((state) => state.selected);
+      const hasSelection = screenshotSummary.hasSelection;
       const canvas = await window.html2canvas(document.documentElement, {
         backgroundColor: null,
         scale: 2,
@@ -549,54 +793,87 @@ document.addEventListener("DOMContentLoaded", () => {
             clonedHeader.style.top = "0";
             clonedHeader.style.zIndex = "auto";
 
-            const clonedNavigation = clonedHeader.querySelector(
-              '[data-purpose="main-nav-links"]',
-            );
-            if (clonedNavigation) clonedNavigation.remove();
-
-            const clonedHeaderActions = clonedHeader.querySelector(".header-actions");
-            if (clonedHeaderActions) {
-              clonedHeaderActions.style.flex = "1";
-              clonedHeaderActions.style.minWidth = "0";
-
-              const stockButton = clonedHeaderActions.querySelector(".header-stock-cta");
-              const whatsappButton = clonedHeaderActions.querySelector(
-                '[data-purpose="header-whatsapp-cta"]',
+            if (window.innerWidth >= 1024) {
+              const clonedNavigation = clonedHeader.querySelector(
+                '[data-purpose="main-nav-links"]',
               );
-              for (const button of [stockButton, whatsappButton]) {
-                if (button) {
-                  button.style.flex = "1 1 0";
-                  button.style.minWidth = "0";
-                  button.style.justifyContent = "center";
+              if (clonedNavigation) clonedNavigation.remove();
+
+              const clonedHeaderActions = clonedHeader.querySelector(".header-actions");
+              if (clonedHeaderActions) {
+                clonedHeaderActions.style.flex = "1";
+                clonedHeaderActions.style.minWidth = "0";
+
+                const stockButton = clonedHeaderActions.querySelector(".header-stock-cta");
+                const whatsappButton = clonedHeaderActions.querySelector(
+                  '[data-purpose="header-whatsapp-cta"]',
+                );
+                for (const button of [stockButton, whatsappButton]) {
+                  if (button) {
+                    button.style.flex = "1 1 0";
+                    button.style.minWidth = "0";
+                    button.style.justifyContent = "center";
+                  }
                 }
+
+                const stockLabel = stockButton?.querySelector("span");
+                if (stockLabel) stockLabel.textContent = "shahimeva.com";
+
+                const whatsappLabel = whatsappButton?.querySelector("span");
+                if (whatsappLabel) whatsappLabel.textContent = "87573 46644";
+
+                clonedHeaderActions.querySelector(".mobile-menu-toggle")?.remove();
               }
-
-              const stockLabel = stockButton?.querySelector("span");
-              if (stockLabel) stockLabel.textContent = "shahimeva.com";
-
-              const whatsappLabel = whatsappButton?.querySelector("span");
-              if (whatsappLabel) whatsappLabel.textContent = "87573 46644";
-
-              clonedHeaderActions.querySelector(".mobile-menu-toggle")?.remove();
             }
           }
 
           const clonedTableHeader = clonedDocument.querySelector(".inventory-table thead");
           if (clonedTableHeader) clonedTableHeader.style.position = "static";
 
-          clonedDocument.querySelectorAll(".product-row").forEach((row) => {
-            const quantityCell = row.querySelector(".inventory-quantity");
-            const state = rowStates.get(row.dataset.sku);
-            const quantity = state?.selected ? String(state.quantity) : "";
+          const clonedControls = clonedDocument.querySelector(".inventory-controls");
+          if (clonedControls) {
+            clonedControls.style.position = "static";
+            clonedControls.style.top = "auto";
+            clonedControls.style.zIndex = "auto";
+          }
+
+          clonedDocument.querySelectorAll(".product-row, .inventory-mobile-card").forEach((row) => {
+            const quantityCell = row.querySelector(".inventory-quantity, .inventory-mobile-quantity");
+            const state = selectionSnapshot.get(row.dataset.sku);
+            const product = products.find((entry) => entry.sku === row.dataset.sku);
+            const selected = Boolean(
+              state?.selected &&
+              product?.inStock &&
+              Number.isInteger(state.quantity) &&
+              state.quantity >= 1,
+            );
+            const quantity = selected ? state.quantity : 0;
+            row.classList.toggle("is-selected", selected);
+            row.dataset.selected = String(selected);
             if (!quantityCell) return;
 
             row.hidden = false;
+            const priceCell = row.querySelector(".inventory-price");
+            if (priceCell && product) {
+              priceCell.classList.toggle("has-selection", selected);
+              const unitPrice = priceCell.querySelector(".unit-price");
+              const lineTotal = priceCell.querySelector(".line-total");
+              const perPack = priceCell.querySelector(".inventory-unit-price");
+              if (unitPrice) unitPrice.hidden = selected;
+              if (lineTotal) {
+                lineTotal.textContent = formatMoney(
+                  calculateLineTotal(product, selected ? quantity : 0),
+                );
+                lineTotal.hidden = !selected;
+              }
+              if (perPack) perPack.hidden = selected && quantity > 1;
+            }
             quantityCell.querySelector(".quantity-control")?.remove();
             quantityCell.querySelector(".bulk-enquiry")?.remove();
 
             const selectedQuantity = clonedDocument.createElement("span");
             selectedQuantity.className = "screenshot-quantity";
-            selectedQuantity.textContent = quantity;
+            selectedQuantity.textContent = selected ? String(quantity) : "";
             quantityCell.prepend(selectedQuantity);
           });
           const clonedNoResults = clonedDocument.querySelector("#no-results");
@@ -608,15 +885,31 @@ document.addEventListener("DOMContentLoaded", () => {
             clonedInventoryWhatsAppLabel.replaceChildren("87573 46644");
           }
 
-          const clonedQuoteTab = clonedDocument.querySelector("#whatsapp-cta-btn.is-visible");
+          const clonedQuoteTab = clonedDocument.querySelector("#whatsapp-cta-btn");
           if (clonedQuoteTab) {
-            const quoteHeight = clonedQuoteTab.getBoundingClientRect().height;
-            clonedQuoteTab.style.position = "absolute";
-            clonedQuoteTab.style.top =
-              `${Math.max(0, currentScrollY + viewportHeight - quoteHeight - 16)}px`;
-            clonedQuoteTab.style.right = "auto";
-            clonedQuoteTab.style.bottom = "auto";
-            clonedQuoteTab.style.left = "1rem";
+            clonedQuoteTab.classList.toggle("is-visible", hasSelection);
+            clonedQuoteTab.setAttribute("aria-hidden", String(!hasSelection));
+            clonedQuoteTab.tabIndex = hasSelection ? 0 : -1;
+            clonedQuoteTab.href = hasSelection
+              ? whatsappUrl(buildQuotationMessage(screenshotSummary))
+              : generalEnquiryUrl;
+            clonedQuoteTab.querySelector("#total-amount").textContent =
+              formatMoney(screenshotSummary.amount);
+            clonedQuoteTab.querySelector("#total-quantity").textContent =
+              String(screenshotSummary.selectedQuantity);
+            clonedQuoteTab.querySelector("#total-item-label").textContent =
+              screenshotSummary.selectedQuantity === 1 ? "item" : "items";
+            clonedQuoteTab.querySelector("#total-weight").textContent =
+              formatWeight(screenshotSummary.weight);
+            if (hasSelection) {
+              const quoteRect = clonedQuoteTab.getBoundingClientRect();
+              clonedQuoteTab.style.position = "absolute";
+              clonedQuoteTab.style.top = `${Math.max(0, currentScrollY + quoteRect.top)}px`;
+              clonedQuoteTab.style.right = "auto";
+              clonedQuoteTab.style.bottom = "auto";
+              clonedQuoteTab.style.left = `${quoteRect.left}px`;
+              clonedQuoteTab.style.transform = "none";
+            }
           }
 
           const clonedToast = clonedDocument.querySelector("#screenshot-toast");

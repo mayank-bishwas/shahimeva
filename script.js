@@ -38,6 +38,178 @@ document.querySelectorAll('[data-purpose="pricing-row"]').forEach((row) => {
   }
 });
 
+const homepageVariantSelects = document.querySelectorAll(
+  '#price-list #pricing-table select[data-purpose="variant-select"]',
+);
+let openHomepageVariantDropdown = null;
+
+const closeHomepageVariantDropdown = (restoreFocus = false) => {
+  if (!openHomepageVariantDropdown) return;
+
+  const { menu, trigger } = openHomepageVariantDropdown;
+  menu.hidden = true;
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.removeAttribute("aria-activedescendant");
+  openHomepageVariantDropdown = null;
+
+  if (restoreFocus) trigger.focus();
+};
+
+const positionHomepageVariantMenu = ({ menu, trigger }) => {
+  const triggerRect = trigger.getBoundingClientRect();
+  menu.style.width = `${triggerRect.width}px`;
+
+  const menuHeight = menu.getBoundingClientRect().height;
+  const top = triggerRect.bottom + menuHeight <= window.innerHeight - 8
+    ? triggerRect.bottom + 4
+    : Math.max(8, triggerRect.top - menuHeight - 4);
+  const left = Math.max(
+    8,
+    Math.min(triggerRect.left, window.innerWidth - triggerRect.width - 8),
+  );
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+};
+
+homepageVariantSelects.forEach((select, selectIndex) => {
+  const row = select.closest("tr");
+  const productName = row?.cells[1]?.textContent.trim() || "उत्पाद";
+  const wrapper = document.createElement("div");
+  wrapper.className = "homepage-variant-dropdown";
+  select.before(wrapper);
+  wrapper.append(select);
+  select.classList.add("homepage-variant-native-select");
+  select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "homepage-variant-trigger";
+  trigger.setAttribute("aria-haspopup", "listbox");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-label", `${productName}, पैक साइज़`);
+  trigger.id = `homepage-variant-trigger-${selectIndex}`;
+  wrapper.append(trigger);
+
+  const menu = document.createElement("div");
+  menu.className = "homepage-variant-menu";
+  menu.id = `homepage-variant-menu-${selectIndex}`;
+  menu.setAttribute("role", "listbox");
+  menu.setAttribute("aria-label", `${productName} पैक साइज़`);
+  menu.hidden = true;
+  menu.dataset.homepageVariantMenu = "";
+  document.body.append(menu);
+  trigger.setAttribute("aria-controls", menu.id);
+
+  let activeIndex = select.selectedIndex;
+  const options = Array.from(select.options).map((nativeOption, optionIndex) => {
+    const option = document.createElement("div");
+    option.className = "homepage-variant-option";
+    option.id = `${menu.id}-option-${optionIndex}`;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(optionIndex === select.selectedIndex));
+    option.textContent = nativeOption.textContent;
+    option.addEventListener("mouseenter", () => {
+      activeIndex = optionIndex;
+      updateActiveOption();
+    });
+    option.addEventListener("click", () => {
+      select.selectedIndex = optionIndex;
+      options.forEach((entry, entryIndex) => {
+        entry.setAttribute("aria-selected", String(entryIndex === optionIndex));
+      });
+      trigger.textContent = nativeOption.textContent;
+      trigger.setAttribute("aria-label", `${productName}, पैक साइज़: ${nativeOption.textContent}`);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      closeHomepageVariantDropdown();
+      trigger.focus();
+    });
+    menu.append(option);
+    return option;
+  });
+
+  const updateActiveOption = () => {
+    options.forEach((option, optionIndex) => {
+      option.dataset.active = String(optionIndex === activeIndex);
+    });
+    trigger.setAttribute("aria-activedescendant", options[activeIndex].id);
+  };
+
+  const openMenu = () => {
+    if (openHomepageVariantDropdown) closeHomepageVariantDropdown();
+    activeIndex = select.selectedIndex;
+    menu.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    openHomepageVariantDropdown = { menu, trigger };
+    updateActiveOption();
+    positionHomepageVariantMenu({ menu, trigger });
+  };
+
+  trigger.textContent = select.options[select.selectedIndex]?.textContent || "";
+  trigger.addEventListener("click", () => {
+    if (openHomepageVariantDropdown?.trigger === trigger) {
+      closeHomepageVariantDropdown();
+    } else {
+      openMenu();
+    }
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && openHomepageVariantDropdown?.trigger === trigger) {
+      event.preventDefault();
+      closeHomepageVariantDropdown(true);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      if (openHomepageVariantDropdown?.trigger === trigger) closeHomepageVariantDropdown();
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (openHomepageVariantDropdown?.trigger !== trigger) openMenu();
+      else {
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        activeIndex = (activeIndex + direction + options.length) % options.length;
+        updateActiveOption();
+      }
+      return;
+    }
+
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (openHomepageVariantDropdown?.trigger !== trigger) openMenu();
+      activeIndex = event.key === "Home" ? 0 : options.length - 1;
+      updateActiveOption();
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (openHomepageVariantDropdown?.trigger !== trigger) {
+        openMenu();
+        return;
+      }
+      options[activeIndex].click();
+    }
+  });
+});
+
+document.addEventListener("click", (event) => {
+  if (
+    openHomepageVariantDropdown &&
+    !openHomepageVariantDropdown.trigger.contains(event.target) &&
+    !openHomepageVariantDropdown.menu.contains(event.target)
+  ) {
+    closeHomepageVariantDropdown();
+  }
+});
+
+window.addEventListener("resize", () => closeHomepageVariantDropdown());
+window.addEventListener("scroll", () => closeHomepageVariantDropdown(), true);
+
 const mobileMenuToggle = document.querySelector(".mobile-menu-toggle");
 const mobileNavPanel = document.querySelector("#mobile-nav-panel");
 const mobileMenuBackdrop = document.querySelector(".mobile-menu-backdrop");
@@ -221,7 +393,7 @@ if (isInventoryPage) {
     link.classList.remove("is-active");
     link.removeAttribute("aria-current");
   });
-} else if (mainNavigationLinks.length && "IntersectionObserver" in window) {
+} else if (mainNavigationLinks.length) {
   const sectionLinks = mainNavigationLinks
     .map((link) => ({ link, section: document.getElementById(new URL(link.href).hash.slice(1)) }))
     .filter((entry) => entry.section);
@@ -235,32 +407,30 @@ if (isInventoryPage) {
     });
   };
 
-  const sectionObserver = new IntersectionObserver(
-    (entries) => {
-      const visibleSections = entries.filter((entry) => entry.isIntersecting);
-      if (visibleSections.length) {
-        visibleSections.sort(
-          (left, right) =>
-            Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top),
-        );
-        markActiveSection(visibleSections[0].target.id);
-      }
-    },
-    { rootMargin: "-80px 0px -62% 0px", threshold: 0 },
-  );
+  const updateActiveSection = () => {
+    const header = document.querySelector('header[data-purpose="site-navigation"]');
+    const activationLine = (header?.getBoundingClientRect().bottom || 0) + 24;
+    const activeEntries = sectionLinks.filter(
+      ({ section }) => section.getBoundingClientRect().top <= activationLine,
+    );
+    const activeEntry = activeEntries[activeEntries.length - 1];
 
-  sectionLinks.forEach(({ section }) => sectionObserver.observe(section));
-  const markActiveHash = () => {
-    const sectionId = window.location.hash.slice(1);
-    if (sectionLinks.some(({ section }) => section.id === sectionId)) {
-      markActiveSection(sectionId);
-    }
+    markActiveSection(activeEntry?.section.id || "");
   };
-  markActiveHash();
-  window.addEventListener("hashchange", markActiveHash);
-  mainNavigationLinks.forEach((link) => {
-    link.addEventListener("click", () => markActiveSection(new URL(link.href).hash.slice(1)));
-  });
+
+  let activeSectionFrame = 0;
+  const scheduleActiveSectionUpdate = () => {
+    if (activeSectionFrame) return;
+    activeSectionFrame = window.requestAnimationFrame(() => {
+      activeSectionFrame = 0;
+      updateActiveSection();
+    });
+  };
+
+  updateActiveSection();
+  window.addEventListener("scroll", scheduleActiveSectionUpdate, { passive: true });
+  window.addEventListener("resize", scheduleActiveSectionUpdate);
+  window.addEventListener("hashchange", scheduleActiveSectionUpdate);
 }
 
 const mobileHeroMedia = window.matchMedia("(max-width: 767px)");
