@@ -1,5 +1,109 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const products = window.shahiMevaInventoryData;
+const INVENTORY_API_URL = window.SHAHI_MEVA_INVENTORY_API || "http://localhost:3001/api/inventory/public";
+
+const CATEGORY_SLUGS = {
+  "मखाना (Makhana)": "makhana",
+  "काजू (Cashew)": "cashew",
+  "बादाम (Almond)": "almond",
+  "किशमिश (Raisin)": "raisin",
+  "अखरोट (Walnut)": "walnut",
+};
+
+function mapApiProduct(apiProduct) {
+  const unit = apiProduct.unit || "";
+  const variantNumber = Number(apiProduct.variant) || 0;
+  const weightKg = unit === "g" ? variantNumber / 1000 : variantNumber;
+  const packLabel = unit === "g"
+    ? `${variantNumber} ग्राम`
+    : unit === "kg"
+      ? `${variantNumber} किलो`
+      : apiProduct.variant;
+  const categorySlug = CATEGORY_SLUGS[apiProduct.category] || "";
+  return {
+    sku: apiProduct.sku,
+    category: categorySlug,
+    categoryName: apiProduct.category.split(" (")[0] || apiProduct.category,
+    categoryEnglish: apiProduct.category,
+    name: apiProduct.name,
+    description: apiProduct.description || "",
+    pack: packLabel,
+    weight: Number.isNaN(weightKg) ? 0 : weightKg,
+    price: Number(apiProduct.price) || 0,
+    image: Array.isArray(apiProduct.imageUrls) && apiProduct.imageUrls.length
+      ? apiProduct.imageUrls[0]
+      : "",
+    images: Array.isArray(apiProduct.imageUrls) ? apiProduct.imageUrls : [],
+    inStock: apiProduct.inStock === true,
+  };
+}
+
+function showInventoryState(state) {
+  const tableWrap = document.querySelector(".inventory-table-wrap");
+  const mobileProducts = document.querySelector("#inventory-mobile-products");
+  const noResults = document.querySelector("#no-results");
+  const loadingNotice = document.querySelector("#inventory-loading");
+  const errorNotice = document.querySelector("#inventory-error");
+  const errorRetry = document.querySelector("#inventory-error-retry");
+  const stockDate = document.querySelector("#stock-date");
+
+  const elements = [tableWrap, mobileProducts, noResults, loadingNotice, errorNotice];
+  for (const el of elements) {
+    if (el) el.hidden = true;
+  }
+  if (errorRetry) errorRetry.hidden = true;
+
+  if (state === "loading") {
+    if (loadingNotice) loadingNotice.hidden = false;
+    return;
+  }
+  if (state === "error") {
+    if (errorNotice) errorNotice.hidden = false;
+    if (errorRetry) errorRetry.hidden = false;
+    return;
+  }
+  if (state === "empty") {
+    if (noResults) {
+      noResults.hidden = false;
+      noResults.textContent = "फिलहाल कोई उत्पाद उपलब्ध नहीं है।";
+    }
+    return;
+  }
+  if (state === "ready") {
+    if (tableWrap) tableWrap.hidden = false;
+    if (mobileProducts) mobileProducts.hidden = false;
+    if (tableWrap) tableWrap.hidden = false;
+    if (mobileProducts) mobileProducts.hidden = false;
+    if (stockDate) {
+      const formatter = new Intl.DateTimeFormat("hi-IN", { day: "numeric", month: "long", year: "numeric" });
+      stockDate.textContent = `${formatter.format(new Date())} के अनुसार`;
+    }
+  }
+}
+
+async function loadInventory() {
+  showInventoryState("loading");
+  try {
+    const response = await fetch(INVENTORY_API_URL, { method: "GET" });
+    if (!response.ok) {
+      throw new Error(`Inventory API responded with status ${response.status}`);
+    }
+    const apiProducts = await response.json();
+    if (!Array.isArray(apiProducts)) {
+      throw new Error("Inventory API returned an unexpected response format.");
+    }
+    if (apiProducts.length === 0) {
+      showInventoryState("empty");
+      return;
+    }
+    const products = apiProducts.map(mapApiProduct);
+    renderInventory(products);
+    showInventoryState("ready");
+  } catch (error) {
+    console.error("Could not load inventory from API:", error);
+    showInventoryState("error");
+  }
+}
+
+function renderInventory(products) {
   const tableBody = document.querySelector("#table-rows-container");
   const mobileProducts = document.querySelector("#inventory-mobile-products");
   const searchInput = document.querySelector("#product-search");
@@ -959,4 +1063,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateSummary();
   filterProducts();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const retryButton = document.querySelector("#inventory-error-retry");
+  if (retryButton) {
+    retryButton.addEventListener("click", () => {
+      loadInventory();
+    });
+  }
+  loadInventory();
 });

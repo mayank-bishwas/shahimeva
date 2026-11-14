@@ -220,6 +220,13 @@
         </table>
       </div>
       <div class="inventory-mobile-products" id="inventory-mobile-products" aria-label="उत्पाद सूची"></div>
+      <div id="inventory-loading" hidden class="inventory-state">
+        <p>स्टॉक लोड हो रहा है...</p>
+      </div>
+      <div id="inventory-error" hidden class="inventory-state">
+        <p>स्टॉक लोड करने में त्रुटि हुई। कृपया पुनः प्रयास करें।</p>
+        <button id="inventory-error-retry" type="button">पुनः प्रयास करें</button>
+      </div>
       <p class="inventory-empty" id="no-results" hidden>इस खोज से कोई उत्पाद नहीं मिला।</p>
     </section>
     </div>
@@ -315,6 +322,7 @@
     </div>
   </footer>
   <script src="script.js"></script>
+  <script src="inventory-config.js"></script>
   <script src="inventory-data.js"></script>
   <script src="inventory.js"></script>
 </body>

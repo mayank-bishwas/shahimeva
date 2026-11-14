@@ -2414,3 +2414,26 @@ body.inventory-lightbox-open {
     font-size: 0.88rem;
   }
 }
+
+.inventory-state {
+  padding: 2rem 1rem;
+  color: #687365;
+  font-family: "Tiro Devanagari Hindi", serif;
+  text-align: center;
+}
+
+.inventory-state button {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #dce3d6;
+  border-radius: 0.5rem;
+  background: #f1f4eb;
+  color: #2d4a2d;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.inventory-state button:hover {
+  background: #e4e9dc;
+}
