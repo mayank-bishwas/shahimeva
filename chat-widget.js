@@ -179,6 +179,12 @@
         hidePanel();
       }
     });
+
+    // Expand/collapse the panel on mobile by tapping the header
+    panel.querySelector(".chat-header").addEventListener("click", function (e) {
+      if (e.target.closest(".chat-action-btn")) return;
+      panel.classList.toggle("chat-panel-expanded");
+    });
   }
 
   // Toggle panel

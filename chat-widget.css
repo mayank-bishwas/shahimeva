@@ -597,10 +597,23 @@
 @media (max-width: 480px) {
   .chat-panel {
     width: calc(100vw - 32px);
-    height: calc(100vh - 48px);
+    height: 60vh;
     bottom: 24px;
     right: 16px;
-    border-radius: 0;
+    border-radius: 16px;
+    transition: height 0.25s ease;
+  }
+
+  .chat-panel.chat-panel-expanded {
+    height: calc(100vh - 48px);
+  }
+
+  .chat-header {
+    cursor: pointer;
+  }
+
+  .chat-header .chat-actions {
+    cursor: default;
   }
 
   .chat-launcher {
