@@ -3,10 +3,10 @@
 /* Launcher */
 .chat-launcher {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
+  bottom: 48px;
+  right: 48px;
+  width: 112px;
+  height: 112px;
   background: var(--forest);
   border-radius: 50%;
   display: flex;
@@ -25,8 +25,8 @@
 }
 
 .chat-launcher img {
-  width: 28px;
-  height: 28px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
 }
 
@@ -147,11 +147,24 @@
 }
 
 .chat-welcome {
-  align-self: flex-start;
+  align-self: center;
+  text-align: center;
+  color: var(--forest);
+  font-family: "Rozha One", "Playfair Display", serif;
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.chat-welcome-supporting {
+  align-self: center;
+  text-align: center;
   color: var(--olive);
-  font-size: 13px;
-  font-style: italic;
-  margin-bottom: 4px;
+  font-family: "Tiro Devanagari Hindi", serif;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
 }
 
 /* Formatted message blocks */

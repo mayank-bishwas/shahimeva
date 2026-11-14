@@ -59,8 +59,8 @@
           <span class="chat-title">Customer Assistant</span>
         </div>
         <div class="chat-actions">
-          <button class="chat-action-btn" id="chat-whatsapp" aria-label="Contact on WhatsApp" title="WhatsApp">
-            <svg viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.299.144.347.491 1.2.534 1.288.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.353.101.173.449.74 1.011 1.241.724.644 1.334.843 1.523.93.188.086.299.072.41-.057.111-.13.477-.557.604-.748.127-.191.253-.16.425-.096.173.064 1.097.517 1.285.61.188.094.314.139.36.218.046.079.046.46-.098.865zM12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.662 1.441 5.176L2 22l4.981-1.396C8.423 21.464 10.153 22 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"></path></svg>
+          <button class="chat-action-btn" id="chat-whatsapp" aria-label="Contact on WhatsApp" title="WhatsApp" style="padding: 0;">
+            <svg viewBox="0 0 24 24" style="fill: #25D366; width: 20px; height: 20px;"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.299.144.347.491 1.2.534 1.288.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.353.101.173.449.74 1.011 1.241.724.644 1.334.843 1.523.93.188.086.299.072.41-.057.111-.13.477-.557.604-.748.127-.191.253-.16.425-.096.173.064 1.097.517 1.285.61.188.094.314.139.36.218.046.079.046.46-.098.865zM12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.662 1.441 5.176L2 22l4.981-1.396C8.423 21.464 10.153 22 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"></path></svg>
           </button>
           <button class="chat-action-btn" id="chat-reload" aria-label="Start new conversation" title="New conversation">
             <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"></path></svg>
@@ -155,7 +155,13 @@
   function showWelcome() {
     const welcome = document.createElement("div");
     welcome.className = "chat-welcome";
-    welcome.textContent = "नमस्ते! How can I help you today?";
+    welcome.textContent = "शाही मेवा में आपका स्वागत है!";
+
+    const supporting = document.createElement("div");
+    supporting.className = "chat-welcome-supporting";
+    supporting.textContent = "आप हमारे स्टॉक, डिलीवरी, या अन्य जानकारी पूछ सकते हैं।";
+
+    welcome.appendChild(supporting);
     messagesContainer.appendChild(welcome);
   }
 
@@ -394,6 +400,12 @@
 
   // Add user message
   function addUserMessage(text) {
+    // Remove welcome screen on first customer message
+    const welcome = messagesContainer.querySelector(".chat-welcome");
+    if (welcome) {
+      welcome.remove();
+    }
+
     const msg = document.createElement("div");
     msg.className = "chat-message user";
     msg.textContent = text;
