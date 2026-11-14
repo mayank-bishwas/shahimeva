@@ -208,12 +208,18 @@
           </colgroup>
           <thead>
             <tr>
-              <th scope="col">संख्या</th>
+              <th scope="col" id="sku-header" class="sortable-header" data-sort="sku">
+                <button type="button" class="sort-header-button">संख्या <span class="sort-indicator" data-sku-indicator aria-hidden="true">↕</span></button>
+              </th>
               <th scope="col">तस्वीर</th>
               <th scope="col">उत्पाद एवं विवरण</th>
-              <th scope="col">साइज / वैरिएंट</th>
+              <th scope="col" id="variant-header" class="sortable-header" data-sort="variant">
+                <button type="button" class="sort-header-button">साइज / वैरिएंट <span class="sort-indicator" data-variant-indicator aria-hidden="true">↕</span></button>
+              </th>
               <th scope="col">मात्रा</th>
-              <th scope="col">दर (₹)</th>
+              <th scope="col" id="price-header" class="sortable-header" data-sort="price">
+                <button type="button" class="sort-header-button">दर (₹) <span class="sort-indicator" data-price-indicator aria-hidden="true">↕</span></button>
+              </th>
             </tr>
           </thead>
           <tbody id="table-rows-container"></tbody>

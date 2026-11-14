@@ -201,22 +201,52 @@
 }
 
 .inventory-table thead {
-  background: #eef2e8;
-  color: #384539;
+  background: var(--forest);
+  color: #fffefa;
 }
 
 .inventory-table th {
   padding: 0.95rem 1rem;
-  border-bottom: 1px solid #dce3d6;
+  border-bottom: 1px solid #476b54;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   white-space: nowrap;
+  text-align: center;
 }
 
-.inventory-table th:first-child,
-.inventory-table td:first-child {
-  text-align: center;
+.inventory-table th:nth-child(3) {
+  text-align: left;
+}
+
+.inventory-table th.sortable-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.inventory-table th.sortable-header .sort-header-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.inventory-table th.sortable-header .sort-indicator {
+  font-size: 0.7rem;
+  color: inherit;
+  opacity: 1;
+  flex-shrink: 0;
+}
+
+.inventory-table th.sortable-header.sorted .sort-indicator {
+  /* Active state - indicator already visible, could add emphasis if needed */
 }
 
 .inventory-table td {

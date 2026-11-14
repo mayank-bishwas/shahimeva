@@ -128,6 +128,7 @@ function renderInventory(products) {
   let pointerStartX = null;
   let screenshotInProgress = false;
   let screenshotToastTimer;
+  let sortState = { field: null, direction: "asc" }; // null|"sku"|"variant"
 
   if (
     !Array.isArray(products) || !tableBody || !mobileProducts || !searchInput || !categoryFilter ||
@@ -429,12 +430,17 @@ function renderInventory(products) {
 
   function filterProducts() {
     const query = searchInput.value.trim().toLocaleLowerCase("hi-IN");
+    const keywords = query
+      .split(/\s+/)
+      .filter(Boolean);
     const categories = getSelectedValues(categoryFilter);
     const availability = getSelectedValues(availabilityFilter);
     let visibleCount = 0;
 
     rows.forEach(({ element, card, product }) => {
-      const matchesQuery = !query || element.dataset.search.includes(query);
+      const matchesQuery =
+        keywords.length === 0 ||
+        keywords.some((keyword) => element.dataset.search.includes(keyword));
       const matchesCategory = categories.includes(product.category);
       const matchesAvailability =
         (availability.includes("in-stock") && product.inStock) ||
@@ -447,6 +453,92 @@ function renderInventory(products) {
     });
 
     noResults.hidden = visibleCount > 0;
+  }
+
+  function handleSort(field) {
+    if (sortState.field === field) {
+      sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+    } else {
+      sortState.field = field;
+      sortState.direction = "asc";
+    }
+    updateSortIndicators();
+    applySort();
+    filterProducts();
+  }
+
+  function updateSortIndicators() {
+    const fields = ["sku", "variant", "price"];
+
+    fields.forEach((field) => {
+      const header = document.querySelector(`#${field}-header`);
+      const indicator = document.querySelector(`[data-${field}-indicator]`);
+      const isActive = sortState.field === field;
+
+      if (header) header.classList.toggle("sorted", isActive);
+      if (indicator) {
+        indicator.textContent = isActive
+          ? sortState.direction === "asc" ? "↑" : "↓"
+          : "↕";
+      }
+    });
+  }
+
+  function applySort() {
+    if (!sortState.field) return;
+
+    const rowsArray = Array.from(rows);
+    rowsArray.sort((a, b) => {
+      let aVal, bVal;
+      if (sortState.field === "sku") {
+        aVal = a.product.sku;
+        bVal = b.product.sku;
+      } else if (sortState.field === "variant") {
+        aVal = a.product.weight;
+        bVal = b.product.weight;
+      } else if (sortState.field === "price") {
+        aVal = a.product.price;
+        bVal = b.product.price;
+      } else {
+        return 0;
+      }
+
+      const cmp = naturalCompare(aVal, bVal);
+      return sortState.direction === "asc" ? cmp : -cmp;
+    });
+
+    const tableBody = document.querySelector("#table-rows-container");
+
+    rowsArray.forEach(({ element }) => {
+      tableBody.appendChild(element);
+    });
+  }
+
+  function naturalCompare(a, b) {
+    const aStr = String(a);
+    const bStr = String(b);
+
+    const tokenize = (str) =>
+      str.split(/(\d+)/).map((part) => {
+        const num = Number(part);
+        return Number.isNaN(num) ? part.toLocaleLowerCase("hi-IN") : num;
+      });
+
+    const aTokens = tokenize(aStr);
+    const bTokens = tokenize(bStr);
+
+    for (let i = 0; i < Math.max(aTokens.length, bTokens.length); i++) {
+      const ta = aTokens[i];
+      const tb = bTokens[i];
+      if (ta === undefined) return -1;
+      if (tb === undefined) return 1;
+      if (typeof ta === "number" && typeof tb === "number") {
+        if (ta !== tb) return ta < tb ? -1 : 1;
+      } else if (ta !== tb) {
+        return String(ta).localeCompare(String(tb), "hi-IN", { numeric: true });
+      }
+    }
+    return 0;
   }
 
   function getSelectedValues(filter) {
@@ -691,6 +783,20 @@ function renderInventory(products) {
   searchInput.addEventListener("input", filterProducts);
   categoryFilter.addEventListener("multiselectchange", filterProducts);
   availabilityFilter.addEventListener("multiselectchange", filterProducts);
+
+  // Sortable column headers
+  const skuHeader = document.querySelector("#sku-header .sort-header-button");
+  const variantHeader = document.querySelector("#variant-header .sort-header-button");
+  const priceHeader = document.querySelector("#price-header .sort-header-button");
+  if (skuHeader) {
+    skuHeader.addEventListener("click", () => handleSort("sku"));
+  }
+  if (variantHeader) {
+    variantHeader.addEventListener("click", () => handleSort("variant"));
+  }
+  if (priceHeader) {
+    priceHeader.addEventListener("click", () => handleSort("price"));
+  }
 
   resetButton.addEventListener("click", () => {
     rows.forEach(({ product, inputs }) => {
