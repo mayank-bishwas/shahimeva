@@ -13,6 +13,10 @@
   const MAX_RECORDING_DURATION_MS = 60000;
   const MAX_CAPTURE_SIZE = 7500000;
 
+  // Session persistence — keeps the conversation across page navigation
+  const SESSION_KEY = "shahiMevaCustomerChat";
+  const SESSION_TTL_MS = 30 * 60 * 1000;
+
   // State
   let history = [];
   let isStreaming = false;
@@ -37,6 +41,10 @@
   let voiceRequestInFlight = false;
   let voiceAbortController = null;
 
+  // Persisted session state
+  let sessionId = null;
+  let lastActivity = 0;
+
   // DOM elements
   let launcher = null;
   let panel = null;
@@ -58,7 +66,16 @@
   function init() {
     buildDOM();
     bindEvents();
-    showWelcome();
+    if (isReloadNavigation()) {
+      // A real browser reload starts a fresh session.
+      startNewSession();
+      showWelcome();
+      return;
+    }
+    if (!restoreSession()) {
+      startNewSession();
+      showWelcome();
+    }
   }
 
   // Build widget DOM
@@ -194,6 +211,7 @@
     isStreaming = false;
     history = [];
     messagesContainer.innerHTML = "";
+    startNewSession();
     showWelcome();
     input.value = "";
     input.style.height = "auto";
@@ -213,6 +231,105 @@
 
     welcome.appendChild(supporting);
     messagesContainer.appendChild(welcome);
+  }
+
+  // --- Session persistence (sessionStorage) ---
+  // Keeps the conversation across homepage <-> inventory navigation.
+  // A real browser reload clears the session; tab close ends it naturally.
+  function generateSessionId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    return "session-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+  }
+
+  function isReloadNavigation() {
+    try {
+      const entries = performance.getEntriesByType && performance.getEntriesByType("navigation");
+      if (entries && entries.length) return entries[0].type === "reload";
+      if (performance.navigation) return performance.navigation.type === 1;
+    } catch (error) {
+      // Fall through — treat as a normal navigation.
+    }
+    return false;
+  }
+
+  function readSession() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.history) || typeof data.lastActivity !== "number") return null;
+      if (Date.now() - data.lastActivity > SESSION_TTL_MS) return null;
+      return data;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeSession() {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        sessionId: sessionId,
+        history: history,
+        lastActivity: lastActivity,
+      }));
+    } catch (error) {
+      // Storage unavailable or full — the conversation simply won't persist.
+    }
+  }
+
+  function clearSession() {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch (error) {
+      // Ignore.
+    }
+  }
+
+  function touchSession() {
+    lastActivity = Date.now();
+    writeSession();
+  }
+
+  function renderRestoredMessage(entry) {
+    if (!entry || typeof entry.content !== "string") return;
+    if (entry.role === "user") {
+      const msg = document.createElement("div");
+      msg.className = "chat-message user";
+      msg.textContent = entry.content;
+      messagesContainer.appendChild(msg);
+    } else if (entry.role === "assistant") {
+      const blocks = parseMarkdown(entry.content);
+      const html = blocksToHTML(blocks);
+      const msg = document.createElement("div");
+      msg.className = "chat-message assistant formatted-message";
+      msg.innerHTML = html;
+      messagesContainer.appendChild(msg);
+      const copyButton = createCopyButton(entry.content);
+      msg.insertAdjacentElement("afterend", copyButton);
+    }
+  }
+
+  function restoreSession() {
+    const data = readSession();
+    if (!data) {
+      clearSession();
+      return false;
+    }
+    sessionId = typeof data.sessionId === "string" && data.sessionId ? data.sessionId : generateSessionId();
+    history = data.history.slice();
+    for (const entry of history) renderRestoredMessage(entry);
+    lastActivity = Date.now();
+    writeSession();
+    scrollToBottom();
+    return true;
+  }
+
+  function startNewSession() {
+    clearSession();
+    sessionId = generateSessionId();
+    lastActivity = Date.now();
   }
 
   // Voice recording — mirrors the merchant ASK voice flow
@@ -279,6 +396,7 @@
       currentAssistantMessage.appendChild(stopped);
       const fullText = currentRawText;
       history.push({ role: "assistant", content: fullText });
+      touchSession();
       const copyButton = createCopyButton(fullText);
       currentAssistantMessage.insertAdjacentElement("afterend", copyButton);
       currentAssistantMessage = null;
@@ -301,9 +419,9 @@
     const status = voiceState === "requesting"
       ? VOICE_TEXT.permissionWaiting
       : voiceState === "recording"
-        ? VOICE_TEXT.recording + " · " + formatRecordingCountdown(voiceSecondsRemaining)
+        ? formatRecordingCountdown(voiceSecondsRemaining)
         : voiceState === "transcribing"
-          ? VOICE_TEXT.transcribing
+          ? ""
           : VOICE_TEXT.recordingStopped;
     voiceStatus.textContent = status;
     voiceActions.innerHTML = "";
@@ -446,7 +564,7 @@
       voiceCountdownTimer = window.setInterval(function () {
         voiceSecondsRemaining = Math.max(0, Math.ceil((MAX_RECORDING_DURATION_MS - (Date.now() - voiceStartedAt)) / 1000));
         if (voiceState === "recording") {
-          voiceStatus.textContent = VOICE_TEXT.recording + " · " + formatRecordingCountdown(voiceSecondsRemaining);
+          voiceStatus.textContent = formatRecordingCountdown(voiceSecondsRemaining);
         }
       }, 250);
       voiceLimitTimer = window.setTimeout(function () {
@@ -577,6 +695,7 @@
     // Add user message
     addUserMessage(question);
     history.push({ role: "user", content: question });
+    touchSession();
 
     // Clear input
     input.value = "";
@@ -871,6 +990,7 @@
       // Add to history
       const fullText = currentRawText;
       history.push({ role: "assistant", content: fullText });
+      touchSession();
       // Add an independent copy button for this completed response
       const copyButton = createCopyButton(fullText);
       currentAssistantMessage.insertAdjacentElement("afterend", copyButton);
@@ -907,6 +1027,7 @@
     msg.innerHTML = html;
     messagesContainer.appendChild(msg);
     history.push({ role: "assistant", content: text });
+    touchSession();
     // Add an independent copy button for this completed response
     const copyButton = createCopyButton(text);
     msg.insertAdjacentElement("afterend", copyButton);
