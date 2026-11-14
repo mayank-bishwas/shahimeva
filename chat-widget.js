@@ -9,6 +9,9 @@
   // Configuration
   const API_BASE = window.SHAHI_MEVA_CUSTOMER_API || "http://localhost:3001";
   const API_ENDPOINT = API_BASE + "/api/customer/ask";
+  const TRANSCRIBE_ENDPOINT = API_BASE + "/api/customer/transcribe";
+  const MAX_RECORDING_DURATION_MS = 60000;
+  const MAX_CAPTURE_SIZE = 7500000;
 
   // State
   let history = [];
@@ -18,12 +21,35 @@
   let currentRawText = "";
   let abortController = null;
 
+  // Voice recording state
+  let voiceState = "idle"; // idle | requesting | recording | paused | transcribing
+  let voiceSecondsRemaining = 60;
+  let mediaRecorder = null;
+  let mediaStream = null;
+  let voiceChunks = [];
+  let voiceAudioBlob = null;
+  let voiceCountdownTimer = null;
+  let voiceLimitTimer = null;
+  let voiceStartedAt = 0;
+  let voiceCancelled = false;
+  let voiceStopRequested = false;
+  let voicePermissionRequest = false;
+  let voiceRequestInFlight = false;
+  let voiceAbortController = null;
+
   // DOM elements
   let launcher = null;
   let panel = null;
   let messagesContainer = null;
   let input = null;
   let sendBtn = null;
+  let micBtn = null;
+  let stopBtn = null;
+  let composerInner = null;
+  let voiceComposer = null;
+  let voiceStatus = null;
+  let voiceActions = null;
+  let voiceError = null;
   let reloadBtn = null;
   let closeBtn = null;
   let typingIndicator = null;
@@ -74,7 +100,19 @@
           <button class="chat-send" id="chat-send" aria-label="Send" disabled>
             <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
           </button>
+          <button class="chat-mic" id="chat-mic" aria-label="Start voice message" title="Start voice message">
+            <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"></path><path d="M17 11a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"></path></svg>
+          </button>
+          <button class="chat-stop hidden" id="chat-stop" aria-label="जवाब रोकें" title="जवाब रोकें">
+            <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg>
+          </button>
         </div>
+        <div class="chat-voice-composer hidden" id="chat-voice-composer" aria-label="Voice recording controls">
+          <span class="chat-recording-dot" aria-hidden="true"></span>
+          <span class="chat-voice-status" id="chat-voice-status" aria-live="polite"></span>
+          <div class="chat-voice-actions" id="chat-voice-actions"></div>
+        </div>
+        <p class="chat-voice-error hidden" id="chat-voice-error" role="alert"></p>
       </div>
     `;
     document.body.appendChild(panel);
@@ -83,15 +121,23 @@
     messagesContainer = panel.querySelector("#chat-messages");
     input = panel.querySelector("#chat-input");
     sendBtn = panel.querySelector("#chat-send");
+    micBtn = panel.querySelector("#chat-mic");
+    stopBtn = panel.querySelector("#chat-stop");
+    composerInner = panel.querySelector(".chat-composer-inner");
+    voiceComposer = panel.querySelector("#chat-voice-composer");
+    voiceStatus = panel.querySelector("#chat-voice-status");
+    voiceActions = panel.querySelector("#chat-voice-actions");
+    voiceError = panel.querySelector("#chat-voice-error");
     reloadBtn = panel.querySelector("#chat-reload");
     closeBtn = panel.querySelector("#chat-close");
 
-    // Auto-resize textarea and toggle send button
+    // Auto-resize textarea and toggle send/mic buttons
     input.addEventListener("input", function () {
       this.style.height = "auto";
       this.style.height = Math.min(this.scrollHeight, 120) + "px";
-      sendBtn.disabled = !this.value.trim() || isStreaming;
+      updateComposerButtons();
     });
+    updateComposerButtons();
   }
 
   // Bind events
@@ -101,6 +147,8 @@
     reloadBtn.addEventListener("click", reloadConversation);
 
     sendBtn.addEventListener("click", sendMessage);
+    micBtn.addEventListener("click", startVoiceRecording);
+    stopBtn.addEventListener("click", stopResponse);
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -132,18 +180,25 @@
   }
 
   function hidePanel() {
+    discardVoiceRecording();
     panel.classList.add("hidden");
     launcher.style.display = "flex";
   }
 
   // Reload conversation
   function reloadConversation() {
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
+    isStreaming = false;
     history = [];
     messagesContainer.innerHTML = "";
     showWelcome();
     input.value = "";
     input.style.height = "auto";
-    sendBtn.disabled = true;
+    discardVoiceRecording();
+    updateComposerButtons();
   }
 
   // Show welcome message
@@ -160,6 +215,360 @@
     messagesContainer.appendChild(welcome);
   }
 
+  // Voice recording — mirrors the merchant ASK voice flow
+  const VOICE_TEXT = {
+    permissionWaiting: "अनुमति की प्रतीक्षा…",
+    permissionDenied: "माइक्रोफ़ोन की अनुमति नहीं मिली। अनुमति दें या टाइप करें।",
+    microphoneUnavailable: "माइक्रोफ़ोन उपलब्ध नहीं है। आप टाइप कर सकते हैं।",
+    unsupportedRecording: "वॉइस रिकॉर्डिंग यहाँ उपलब्ध नहीं है। आप टाइप कर सकते हैं।",
+    unsupportedFormat: "वॉइस रिकॉर्डिंग यहाँ उपलब्ध नहीं है। आप टाइप कर सकते हैं।",
+    recordingFailed: "रिकॉर्डिंग विफल रही। कृपया फिर कोशिश करें।",
+    recordingTooLarge: "रिकॉर्डिंग बहुत बड़ी है। छोटी रिकॉर्डिंग आज़माएँ।",
+    emptyRecording: "कोई आवाज़ नहीं मिली। कृपया फिर रिकॉर्ड करें।",
+    networkError: "प्रोसेस नहीं हो पाया। कृपया फिर कोशिश करें।",
+    transcriptionFailed: "प्रोसेस नहीं हो पाया। कृपया फिर कोशिश करें।",
+    recording: "रिकॉर्डिंग",
+    recordingStopped: "भेजने के लिए तैयार",
+    startVoice: "वॉइस संदेश भेजें",
+    stop: "रोकें",
+    discard: "रद्द करें",
+    transcribing: "लिख रहे हैं…",
+    sendRecording: "भेजें",
+    sendError: "रिकॉर्डिंग नहीं भेजी जा सकी। कृपया फिर कोशिश करें।",
+    answerStopped: "आपने उत्तर रोक दिया।",
+    stopResponse: "जवाब रोकें",
+    sendingMessage: "संदेश भेजा जा रहा है",
+  };
+
+  function formatRecordingCountdown(seconds) {
+    const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    return String(Math.floor(value / 60)).padStart(2, "0") + ":" + String(value % 60).padStart(2, "0");
+  }
+
+  function setVoiceState(state) {
+    voiceState = state;
+    renderVoiceComposer();
+  }
+
+  function setVoiceError(message) {
+    voiceError.textContent = message || "";
+    voiceError.classList.toggle("hidden", !message);
+  }
+
+  function updateComposerButtons() {
+    const hasText = input.value.trim().length > 0;
+    const transcribing = voiceState === "transcribing";
+    input.disabled = transcribing;
+    sendBtn.disabled = !hasText || isStreaming || transcribing;
+    sendBtn.classList.toggle("hidden", !hasText);
+    micBtn.classList.toggle("hidden", hasText || voiceState !== "idle" || isStreaming);
+    stopBtn.classList.toggle("hidden", !isStreaming || hasText || voiceState !== "idle");
+  }
+
+  // Stop an in-flight assistant response (mirrors merchant ASK stop-response)
+  function stopResponse() {
+    if (!isStreaming || !abortController) return;
+    abortController.abort();
+    abortController = null;
+    hideTyping();
+    if (currentAssistantMessage) {
+      currentAssistantMessage.classList.remove("chat-pending");
+      const stopped = document.createElement("small");
+      stopped.className = "answer-stopped";
+      stopped.textContent = VOICE_TEXT.answerStopped;
+      currentAssistantMessage.appendChild(stopped);
+      const fullText = currentRawText;
+      history.push({ role: "assistant", content: fullText });
+      const copyButton = createCopyButton(fullText);
+      currentAssistantMessage.insertAdjacentElement("afterend", copyButton);
+      currentAssistantMessage = null;
+      currentAssistantBlocks = [];
+      currentRawText = "";
+    }
+    isStreaming = false;
+    updateComposerButtons();
+    input.focus();
+  }
+
+  function renderVoiceComposer() {
+    const active = voiceState !== "idle";
+    voiceComposer.className = "chat-voice-composer" + (active ? "" : " hidden") + (voiceState === "paused" ? " paused" : "");
+    composerInner.classList.toggle("hidden", active);
+    if (!active) {
+      updateComposerButtons();
+      return;
+    }
+    const status = voiceState === "requesting"
+      ? VOICE_TEXT.permissionWaiting
+      : voiceState === "recording"
+        ? VOICE_TEXT.recording + " · " + formatRecordingCountdown(voiceSecondsRemaining)
+        : voiceState === "transcribing"
+          ? VOICE_TEXT.transcribing
+          : VOICE_TEXT.recordingStopped;
+    voiceStatus.textContent = status;
+    voiceActions.innerHTML = "";
+    if (voiceState === "requesting") {
+      voiceActions.appendChild(createVoiceButton("chat-voice-button", VOICE_TEXT.discard, discardVoiceRecording, "close"));
+    } else if (voiceState === "recording") {
+      voiceActions.appendChild(createVoiceButton("chat-voice-button", VOICE_TEXT.discard, discardVoiceRecording, "close"));
+      voiceActions.appendChild(createVoiceButton("chat-voice-button chat-voice-primary", VOICE_TEXT.stop, stopVoiceRecording, "pause"));
+    } else if (voiceState === "paused") {
+      voiceActions.appendChild(createVoiceButton("chat-voice-button", VOICE_TEXT.discard, discardVoiceRecording, "close"));
+      voiceActions.appendChild(createVoiceButton("chat-voice-button chat-voice-primary", VOICE_TEXT.sendRecording, sendVoiceRecording, "arrow-up"));
+    }
+  }
+
+  function createVoiceButton(className, label, onClick, iconName) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    if (iconName) button.innerHTML = VOICE_ICONS[iconName];
+    else button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  const VOICE_ICONS = {
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"></path></svg>',
+    "arrow-up": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"></path></svg>',
+    close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>',
+    stop: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg>',
+  };
+
+  function clearVoiceTimers() {
+    if (voiceCountdownTimer !== null) window.clearInterval(voiceCountdownTimer);
+    if (voiceLimitTimer !== null) window.clearTimeout(voiceLimitTimer);
+    voiceCountdownTimer = null;
+    voiceLimitTimer = null;
+  }
+
+  function releaseVoiceMedia(stopRecorder) {
+    clearVoiceTimers();
+    if (mediaRecorder && stopRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.ondataavailable = null;
+      mediaRecorder.onstop = null;
+      try {
+        mediaRecorder.stop();
+      } catch (error) {
+        // The browser may have stopped the recorder already.
+      }
+    }
+    mediaRecorder = null;
+    if (mediaStream) {
+      for (const track of mediaStream.getTracks()) track.stop();
+      mediaStream = null;
+    }
+  }
+
+  function stopAndPauseVoice(automatic) {
+    const recorder = mediaRecorder;
+    if (!recorder || voiceStopRequested || recorder.state === "inactive") return;
+    voiceStopRequested = true;
+    clearVoiceTimers();
+    voiceSecondsRemaining = automatic
+      ? 0
+      : Math.max(0, Math.ceil((MAX_RECORDING_DURATION_MS - (Date.now() - voiceStartedAt)) / 1000));
+    const stopped = new Promise(function (resolve) {
+      recorder.addEventListener("stop", function () { resolve(); }, { once: true });
+    });
+    try {
+      recorder.stop();
+    } catch (error) {
+      releaseVoiceMedia(true);
+      setVoiceError(VOICE_TEXT.recordingFailed);
+      setVoiceState("idle");
+      return;
+    }
+    stopped.then(function () {
+      const blob = new Blob(voiceChunks, { type: recorder.mimeType || "audio/webm" });
+      releaseVoiceMedia(false);
+      voiceChunks = [];
+      if (voiceCancelled) return;
+      if (!blob.size) {
+        setVoiceError(VOICE_TEXT.emptyRecording);
+        setVoiceState("idle");
+        return;
+      }
+      voiceAudioBlob = blob;
+      setVoiceError("");
+      setVoiceState("paused");
+    }).catch(function () {
+      releaseVoiceMedia(true);
+      setVoiceError(VOICE_TEXT.recordingFailed);
+      setVoiceState("idle");
+    });
+  }
+
+  function startVoiceRecording() {
+    if (voiceState !== "idle" || voicePermissionRequest || voiceRequestInFlight) return;
+    setVoiceError("");
+    voiceSecondsRemaining = 60;
+    voiceCancelled = false;
+    voiceStopRequested = false;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+      setVoiceError(VOICE_TEXT.unsupportedRecording);
+      return;
+    }
+    const mimeType = typeof MediaRecorder.isTypeSupported === "function"
+      ? ["audio/webm;codecs=opus", "audio/webm"].find(function (candidate) { return MediaRecorder.isTypeSupported(candidate); })
+      : undefined;
+    if (!mimeType) {
+      setVoiceError(VOICE_TEXT.unsupportedFormat);
+      return;
+    }
+
+    voicePermissionRequest = true;
+    setVoiceState("requesting");
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      if (voiceCancelled) {
+        for (const track of stream.getTracks()) track.stop();
+        voicePermissionRequest = false;
+        return;
+      }
+      mediaStream = stream;
+      mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+      voiceChunks = [];
+      mediaRecorder.ondataavailable = function (event) {
+        if (event.data && event.data.size > 0) voiceChunks.push(event.data);
+      };
+      mediaRecorder.onerror = function () {
+        setVoiceError(VOICE_TEXT.recordingFailed);
+        releaseVoiceMedia(true);
+        setVoiceState("idle");
+      };
+      mediaRecorder.start(250);
+      voiceStartedAt = Date.now();
+      voicePermissionRequest = false;
+      setVoiceState("recording");
+      voiceCountdownTimer = window.setInterval(function () {
+        voiceSecondsRemaining = Math.max(0, Math.ceil((MAX_RECORDING_DURATION_MS - (Date.now() - voiceStartedAt)) / 1000));
+        if (voiceState === "recording") {
+          voiceStatus.textContent = VOICE_TEXT.recording + " · " + formatRecordingCountdown(voiceSecondsRemaining);
+        }
+      }, 250);
+      voiceLimitTimer = window.setTimeout(function () {
+        stopAndPauseVoice(true);
+      }, MAX_RECORDING_DURATION_MS);
+    }).catch(function (captureError) {
+      voicePermissionRequest = false;
+      releaseVoiceMedia(true);
+      const name = captureError && captureError.name ? captureError.name : "";
+      setVoiceError(
+        name === "NotAllowedError" || name === "SecurityError"
+          ? VOICE_TEXT.permissionDenied
+          : name === "NotFoundError" || name === "DevicesNotFoundError"
+            ? VOICE_TEXT.microphoneUnavailable
+            : VOICE_TEXT.recordingFailed,
+      );
+      setVoiceState("idle");
+    });
+  }
+
+  function stopVoiceRecording() {
+    stopAndPauseVoice(false);
+  }
+
+  function discardVoiceRecording() {
+    voiceCancelled = true;
+    if (voiceAbortController) {
+      voiceAbortController.abort();
+      voiceAbortController = null;
+    }
+    voiceRequestInFlight = false;
+    if (voiceState === "transcribing") hideTyping();
+    releaseVoiceMedia(true);
+    voiceAudioBlob = null;
+    voiceChunks = [];
+    setVoiceError("");
+    voiceSecondsRemaining = 60;
+    setVoiceState("idle");
+  }
+
+  function sendVoiceRecording() {
+    if (voiceState !== "paused" || voiceRequestInFlight) return;
+    const audio = voiceAudioBlob;
+    if (!audio) return;
+    voiceRequestInFlight = true;
+    voiceCancelled = false;
+    voiceAbortController = new AbortController();
+    setVoiceError("");
+    setVoiceState("transcribing");
+
+    if (audio.size > MAX_CAPTURE_SIZE) {
+      voiceRequestInFlight = false;
+      setVoiceError(VOICE_TEXT.recordingTooLarge);
+      setVoiceState("paused");
+      return;
+    }
+
+    const loadingBubble = showVoiceLoadingBubble();
+
+    const form = new FormData();
+    form.append("audio", audio, "voice-message.webm");
+
+    fetch(TRANSCRIBE_ENDPOINT, {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+      signal: voiceAbortController.signal,
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        return { ok: response.ok, status: response.status, payload: payload };
+      });
+    }).then(function (result) {
+      if (!result.ok || typeof result.payload.transcript !== "string" || !result.payload.transcript.trim()) {
+        throw new Error(
+          result.status === 413
+            ? VOICE_TEXT.recordingTooLarge
+            : result.status === 415
+              ? VOICE_TEXT.unsupportedFormat
+              : result.status === 400
+                ? VOICE_TEXT.emptyRecording
+                : VOICE_TEXT.transcriptionFailed,
+        );
+      }
+      const transcript = result.payload.transcript.trim();
+      voiceAudioBlob = null;
+      voiceChunks = [];
+      voiceSecondsRemaining = 60;
+      voiceRequestInFlight = false;
+      loadingBubble.remove();
+      setVoiceState("idle");
+      submitVoiceTranscript(transcript);
+    }).catch(function (error) {
+      if (voiceCancelled || (error && error.name === "AbortError")) {
+        loadingBubble.remove();
+        return;
+      }
+      voiceRequestInFlight = false;
+      loadingBubble.remove();
+      setVoiceError(VOICE_TEXT.transcriptionFailed);
+      setVoiceState("paused");
+    });
+  }
+
+  function submitVoiceTranscript(transcript) {
+    if (!transcript || isStreaming) return;
+    input.value = transcript;
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    sendMessage();
+  }
+
+  // Temporary right-side bubble shown while a voice recording is transcribed
+  function showVoiceLoadingBubble() {
+    const bubble = document.createElement("div");
+    bubble.className = "chat-message user chat-voice-loading";
+    bubble.setAttribute("aria-label", VOICE_TEXT.transcribing);
+    bubble.innerHTML = '<span class="chat-voice-loading-dots"><span></span><span></span><span></span></span>';
+    messagesContainer.appendChild(bubble);
+    scrollToBottom();
+    return bubble;
+  }
+
   // Send message
   async function sendMessage() {
     const question = input.value.trim();
@@ -172,7 +581,7 @@
     // Clear input
     input.value = "";
     input.style.height = "auto";
-    sendBtn.disabled = true;
+    updateComposerButtons();
 
     // Show typing indicator
     showTyping();
@@ -181,7 +590,9 @@
     try {
       await callAskAPI(question);
     } catch (error) {
+      if (error && error.name === "AbortError") return; // user stopped the response
       hideTyping();
+      isStreaming = false;
       showError("Something went wrong. Please try again.");
       console.error("Chat error:", error);
     }
@@ -252,8 +663,10 @@
 
     if (!hasStarted) {
       hideTyping();
+      isStreaming = false;
       showError("No response received. Please try again.");
     }
+    updateComposerButtons();
   }
 
   // Handle SSE events
@@ -288,6 +701,7 @@
 
       case "error":
         hideTyping();
+        isStreaming = false;
         if (currentAssistantMessage) {
           currentAssistantMessage.remove();
           currentAssistantMessage = null;
@@ -451,6 +865,7 @@
 
   // Finalize assistant message
   function finalizeAssistantMessage(contactOffered) {
+    isStreaming = false;
     if (currentAssistantMessage) {
       currentAssistantMessage.classList.remove("chat-pending");
       // Add to history
@@ -463,7 +878,7 @@
       currentAssistantBlocks = [];
       currentRawText = "";
     }
-    sendBtn.disabled = false;
+    updateComposerButtons();
     input.focus();
   }
 
@@ -484,6 +899,7 @@
 
   // Add assistant message (full, non-streaming)
   function addAssistantMessage(text) {
+    isStreaming = false;
     const blocks = parseMarkdown(text);
     const html = blocksToHTML(blocks);
     const msg = document.createElement("div");
@@ -495,7 +911,7 @@
     const copyButton = createCopyButton(text);
     msg.insertAdjacentElement("afterend", copyButton);
     scrollToBottom();
-    sendBtn.disabled = false;
+    updateComposerButtons();
     input.focus();
   }
 
@@ -597,9 +1013,8 @@
     scrollToBottom();
   }
 
-  // Hide typing indicator
+  // Hide typing indicator (does not end the streaming state)
   function hideTyping() {
-    isStreaming = false;
     if (typingIndicator) {
       typingIndicator.remove();
       typingIndicator = null;
@@ -613,7 +1028,7 @@
     error.textContent = message;
     messagesContainer.appendChild(error);
     scrollToBottom();
-    sendBtn.disabled = false;
+    updateComposerButtons();
     input.focus();
   }
 

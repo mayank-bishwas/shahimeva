@@ -576,8 +576,10 @@ const salesBanner = document.querySelector(".sales-banner-dialog");
 const salesBannerClose = salesBanner?.querySelector(".sales-banner-close");
 const storySection = document.querySelector("#our-story");
 const salesBannerDismissedKey = "shahiMevaSalesBannerDismissed";
+// Development: temporarily disable the promotional banner. Set to true to restore.
+const SALES_BANNER_ENABLED = false;
 
-if (salesBanner instanceof HTMLDialogElement && salesBannerClose) {
+if (SALES_BANNER_ENABLED && salesBanner instanceof HTMLDialogElement && salesBannerClose) {
   let bannerShown = sessionStorage.getItem(salesBannerDismissedKey) === "true";
   let bannerTimer;
 

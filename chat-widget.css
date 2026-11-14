@@ -298,6 +298,10 @@
   box-shadow: 0 4px 16px rgb(39 58 40 / 5%);
 }
 
+.chat-composer-inner.hidden {
+  display: none;
+}
+
 .chat-input {
   flex: 1;
   min-height: 34px;
@@ -340,6 +344,10 @@
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
+.chat-send.hidden {
+  display: none;
+}
+
 .chat-send:hover:not(:disabled) {
   background: var(--olive);
   transform: translateY(-1px);
@@ -356,6 +364,227 @@
   width: 20px;
   height: 20px;
   fill: currentColor;
+}
+
+/* Microphone button — shown when the input is empty */
+.chat-mic {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: #edf1e8;
+  color: #49624e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.chat-mic:hover {
+  background: #dfe8db;
+  transform: translateY(-1px);
+}
+
+.chat-mic:focus-visible {
+  outline: 3px solid var(--gold-light);
+  outline-offset: 2px;
+}
+
+.chat-mic.hidden {
+  display: none;
+}
+
+.chat-mic svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Stop-response button — replaces the microphone while an answer streams */
+.chat-stop {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: #edf1e8;
+  color: #49624e;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.chat-stop:hover {
+  background: #dfe8db;
+  transform: translateY(-1px);
+}
+
+.chat-stop:focus-visible {
+  outline: 3px solid var(--gold-light);
+  outline-offset: 2px;
+}
+
+.chat-stop.hidden {
+  display: none;
+}
+
+.chat-stop svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* Temporary right-side bubble shown while a voice recording is transcribed */
+.chat-voice-loading {
+  justify-content: center;
+  min-width: 64px;
+}
+
+.chat-voice-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+}
+
+.chat-voice-loading-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: chat-voice-loading-bounce 1.2s ease-in-out infinite;
+}
+
+.chat-voice-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.chat-voice-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-voice-loading-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Label appended to an assistant response the customer stopped */
+.answer-stopped {
+  display: block;
+  margin-top: 6px;
+  color: #8a8570;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Voice recording bar — replaces the composer controls while recording */
+.chat-voice-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 16px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 4px 16px rgb(39 58 40 / 5%);
+}
+
+.chat-voice-composer.hidden {
+  display: none;
+}
+
+.chat-recording-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #bd5043;
+  box-shadow: 0 0 0 4px #f8e9e6;
+  animation: chat-recording-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-voice-composer.paused .chat-recording-dot {
+  background: #a6a99b;
+  box-shadow: 0 0 0 4px #f0f1eb;
+  animation: none;
+}
+
+@keyframes chat-recording-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px #f8e9e6; }
+  50% { box-shadow: 0 0 0 7px #f8e9e6; }
+}
+
+.chat-voice-status {
+  flex: 1;
+  min-width: 0;
+  color: #5d6a5e;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chat-voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: #f6f1e5;
+  color: var(--forest);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.chat-voice-button:hover {
+  background: #eee5d3;
+}
+
+.chat-voice-button:focus-visible {
+  outline: 3px solid var(--gold-light);
+  outline-offset: 2px;
+}
+
+.chat-voice-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.chat-voice-primary {
+  background: var(--forest);
+  border-color: var(--forest);
+  color: var(--ivory);
+}
+
+.chat-voice-primary:hover {
+  background: var(--olive);
+  border-color: var(--olive);
+}
+
+/* Voice error line */
+.chat-voice-error {
+  margin: 8px 2px 0;
+  color: #b3261e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-voice-error.hidden {
+  display: none;
 }
 
 .chat-status {
