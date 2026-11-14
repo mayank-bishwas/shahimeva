@@ -9,13 +9,13 @@
   // Configuration
   const API_BASE = window.SHAHI_MEVA_CUSTOMER_API || "http://localhost:3001";
   const API_ENDPOINT = API_BASE + "/api/customer/ask";
-  const WHATSAPP_URL = "https://wa.me/918757346644";
 
   // State
   let history = [];
   let isStreaming = false;
   let currentAssistantMessage = null;
   let currentAssistantBlocks = [];
+  let currentRawText = "";
   let abortController = null;
 
   // DOM elements
@@ -26,7 +26,6 @@
   let sendBtn = null;
   let reloadBtn = null;
   let closeBtn = null;
-  let whatsappBtn = null;
   let typingIndicator = null;
 
   // Initialize widget
@@ -43,7 +42,8 @@
     launcher.className = "chat-launcher";
     launcher.setAttribute("aria-label", "Open Customer Assistant");
     launcher.innerHTML = `
-      <img src="assets/logo.png" alt="Shahi Meva" width="28" height="28">
+      <img class="chat-launcher-art" src="assets/chatbot_outline.png" alt="" width="112" height="112">
+      <img class="chat-launcher-logo" src="assets/logo.png" alt="Shahi Meva" width="57" height="57">
     `;
     document.body.appendChild(launcher);
 
@@ -59,9 +59,6 @@
           <span class="chat-title">Customer Assistant</span>
         </div>
         <div class="chat-actions">
-          <button class="chat-action-btn" id="chat-whatsapp" aria-label="Contact on WhatsApp" title="WhatsApp" style="padding: 0;">
-            <svg viewBox="0 0 24 24" style="fill: #25D366; width: 20px; height: 20px;"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.007c.106.005.249-.04.39.299.144.347.491 1.2.534 1.288.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.353.101.173.449.74 1.011 1.241.724.644 1.334.843 1.523.93.188.086.299.072.41-.057.111-.13.477-.557.604-.748.127-.191.253-.16.425-.096.173.064 1.097.517 1.285.61.188.094.314.139.36.218.046.079.046.46-.098.865zM12 2C6.477 2 2 6.477 2 12c0 1.891.526 3.662 1.441 5.176L2 22l4.981-1.396C8.423 21.464 10.153 22 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"></path></svg>
-          </button>
           <button class="chat-action-btn" id="chat-reload" aria-label="Start new conversation" title="New conversation">
             <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"></path></svg>
           </button>
@@ -71,11 +68,13 @@
         </div>
       </header>
       <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-area">
-        <textarea class="chat-input" id="chat-input" placeholder="Type your question..." rows="1" aria-label="Your question"></textarea>
-        <button class="chat-send" id="chat-send" aria-label="Send" disabled>
-          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
-        </button>
+      <div class="chat-composer">
+        <div class="chat-composer-inner">
+          <textarea class="chat-input" id="chat-input" placeholder="Type your question..." rows="1" aria-label="Your question"></textarea>
+          <button class="chat-send" id="chat-send" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+          </button>
+        </div>
       </div>
     `;
     document.body.appendChild(panel);
@@ -86,12 +85,12 @@
     sendBtn = panel.querySelector("#chat-send");
     reloadBtn = panel.querySelector("#chat-reload");
     closeBtn = panel.querySelector("#chat-close");
-    whatsappBtn = panel.querySelector("#chat-whatsapp");
 
-    // Auto-resize textarea
+    // Auto-resize textarea and toggle send button
     input.addEventListener("input", function () {
       this.style.height = "auto";
       this.style.height = Math.min(this.scrollHeight, 120) + "px";
+      sendBtn.disabled = !this.value.trim() || isStreaming;
     });
   }
 
@@ -100,10 +99,6 @@
     launcher.addEventListener("click", togglePanel);
     closeBtn.addEventListener("click", hidePanel);
     reloadBtn.addEventListener("click", reloadConversation);
-    whatsappBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      window.open(WHATSAPP_URL, "_blank", "noopener,noreferrer");
-    });
 
     sendBtn.addEventListener("click", sendMessage);
     input.addEventListener("keydown", function (e) {
@@ -270,6 +265,7 @@
           currentAssistantMessage.remove();
           currentAssistantMessage = null;
           currentAssistantBlocks = [];
+          currentRawText = "";
         }
         break;
 
@@ -295,31 +291,81 @@
         if (currentAssistantMessage) {
           currentAssistantMessage.remove();
           currentAssistantMessage = null;
+          currentAssistantBlocks = [];
+          currentRawText = "";
         }
         showError("I couldn't generate a response. Please try again.");
         break;
     }
   }
 
+  // Copy button icons (mirrors merchant ASK copy-button)
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"></rect><path d="M16 5V4a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h1"></path></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>';
+
+  // Copy text to clipboard with a textarea fallback
+  async function copyTextToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand("copy");
+        textarea.remove();
+        return ok;
+      } catch (fallbackError) {
+        return false;
+      }
+    }
+  }
+
+  // Build an independent copy button for one completed assistant response
+  function createCopyButton(rawText) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-copy-button";
+    button.setAttribute("aria-label", "Copy response");
+    button.title = "Copy response";
+    button.innerHTML = COPY_ICON + "<span>Copy</span>";
+
+    button.addEventListener("click", async function () {
+      const ok = await copyTextToClipboard(rawText);
+      button.classList.toggle("copied", ok);
+      button.setAttribute("aria-label", ok ? "Response copied" : "Copy failed");
+      button.title = ok ? "Copied" : "Copy failed";
+      button.innerHTML = (ok ? CHECK_ICON : COPY_ICON) + "<span>" + (ok ? "Copied" : "Copy failed") + "</span>";
+      window.setTimeout(function () {
+        button.classList.remove("copied");
+        button.setAttribute("aria-label", "Copy response");
+        button.title = "Copy response";
+        button.innerHTML = COPY_ICON + "<span>Copy</span>";
+      }, 1600);
+    });
+
+    return button;
+  }
+
   // Append streaming token
   function appendToken(token) {
     if (!currentAssistantMessage) {
       currentAssistantMessage = document.createElement("div");
-      currentAssistantMessage.className = "chat-message assistant chat-pending";
+      currentAssistantMessage.className = "chat-message assistant chat-pending formatted-message";
       messagesContainer.appendChild(currentAssistantMessage);
-      scrollToBottom();
     }
 
-    // Accumulate raw markdown
-    const lastBlock = currentAssistantBlocks[currentAssistantBlocks.length - 1];
-    if (lastBlock && lastBlock.type === "paragraph") {
-      lastBlock.text += token;
-    } else {
-      currentAssistantBlocks.push({ type: "paragraph", text: token });
-    }
+    // Accumulate raw markdown and re-parse so formatting renders progressively
+    currentRawText += token;
+    currentAssistantBlocks = parseMarkdown(currentRawText);
 
-    // Re-render
     renderAssistantMessage();
+    scrollToBottom();
   }
 
   // Render assistant message from blocks
@@ -339,9 +385,10 @@
           case "heading":
             return `<h3>${escapeHTML(block.text)}</h3>`;
           case "paragraph":
-            return `<p>${formatInline(block.text)}</p>`;
+            return `<p>${formatInline(escapeHTML(block.text))}</p>`;
           case "list":
-            return `<ul>${block.items.map((item) => `<li>${formatInline(item)}</li>`).join("")}</ul>`;
+            const tag = block.ordered ? "ol" : "ul";
+            return `<${tag}>${block.items.map((item) => `<li>${formatInline(escapeHTML(item))}</li>`).join("")}</${tag}>`;
           case "table":
             return renderTable(block.rows);
           default:
@@ -351,20 +398,40 @@
       .join("");
   }
 
-  // Render markdown table
+  // Render markdown table, or a bullet list when the table is too wide
   function renderTable(rows) {
     if (!rows.length) return "";
+    const width = rows[0].length;
+    const maxCellLength = Math.max(...rows.flat().map((cell) => cell.length));
+    // Tables with many columns or long cells are hard to read in a narrow panel
+    if (width > 3 || maxCellLength > 40) {
+      return renderTableAsList(rows);
+    }
     const html = ['<div class="chat-table-scroll"><table>'];
     rows.forEach((row, i) => {
       html.push("<tr>");
       row.forEach((cell) => {
         const tag = i === 0 ? "th" : "td";
-        html.push(`<${tag}>${escapeHTML(cell)}</${tag}>`);
+        html.push(`<${tag}>${formatInline(escapeHTML(cell))}</${tag}>`);
       });
       html.push("</tr>");
     });
     html.push("</table></div>");
     return html.join("");
+  }
+
+  // Present a table as a readable bullet list
+  function renderTableAsList(rows) {
+    if (!rows.length) return "";
+    const header = rows[0];
+    const items = rows.slice(1).map((row) => {
+      const parts = row.map((cell, i) => {
+        const label = header[i] ? `${header[i]}: ` : "";
+        return `${label}${cell}`;
+      });
+      return `<li>${formatInline(escapeHTML(parts.join(" — ")))}</li>`;
+    });
+    return `<ul>${items.join("")}</ul>`;
   }
 
   // Format inline markdown (bold, italic, code)
@@ -387,12 +454,14 @@
     if (currentAssistantMessage) {
       currentAssistantMessage.classList.remove("chat-pending");
       // Add to history
-      const fullText = currentAssistantBlocks
-        .map((b) => (b.type === "paragraph" ? b.text : b.type === "heading" ? b.text : b.items?.join("\n") || ""))
-        .join("\n");
+      const fullText = currentRawText;
       history.push({ role: "assistant", content: fullText });
+      // Add an independent copy button for this completed response
+      const copyButton = createCopyButton(fullText);
+      currentAssistantMessage.insertAdjacentElement("afterend", copyButton);
       currentAssistantMessage = null;
       currentAssistantBlocks = [];
+      currentRawText = "";
     }
     sendBtn.disabled = false;
     input.focus();
@@ -418,10 +487,13 @@
     const blocks = parseMarkdown(text);
     const html = blocksToHTML(blocks);
     const msg = document.createElement("div");
-    msg.className = "chat-message assistant";
+    msg.className = "chat-message assistant formatted-message";
     msg.innerHTML = html;
     messagesContainer.appendChild(msg);
     history.push({ role: "assistant", content: text });
+    // Add an independent copy button for this completed response
+    const copyButton = createCopyButton(text);
+    msg.insertAdjacentElement("afterend", copyButton);
     scrollToBottom();
     sendBtn.disabled = false;
     input.focus();
@@ -482,7 +554,17 @@
           items.push(lines[index].replace(/^\s*[-*]\s+/, "").trim());
           index += 1;
         }
-        blocks.push({ type: "list", items });
+        blocks.push({ type: "list", items, ordered: false });
+        continue;
+      }
+
+      if (/^\s*\d+\.\s+/.test(line)) {
+        const items = [];
+        while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index])) {
+          items.push(lines[index].replace(/^\s*\d+\.\s+/, "").trim());
+          index += 1;
+        }
+        blocks.push({ type: "list", items, ordered: true });
         continue;
       }
 
@@ -493,6 +575,7 @@
         lines[index].trim() &&
         !/^#{1,3}\s+/.test(lines[index]) &&
         !/^\s*[-*]\s+/.test(lines[index]) &&
+        !/^\s*\d+\.\s+/.test(lines[index]) &&
         !isTableStart(lines, index)
       ) {
         paragraph.push(lines[index].trim());
