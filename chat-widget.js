@@ -735,6 +735,7 @@
       body: JSON.stringify({
         question: question,
         history: history.slice(0, -1), // Exclude the current question we just added
+        sessionId: sessionId,
       }),
       signal: abortController.signal,
     });
