@@ -1,4 +1,4 @@
-const INVENTORY_API_URL = window.SHAHI_MEVA_INVENTORY_API || "http://localhost:3001/api/inventory/public";
+const INVENTORY_API_URL = window.SHAHI_MEVA_INVENTORY_API || "https://website-ai-flax.vercel.app/api/inventory/public";
 
 const CATEGORY_SLUGS = {
   "मखाना (Makhana)": "makhana",
@@ -17,7 +17,7 @@ function mapApiProduct(apiProduct) {
     : unit === "kg"
       ? `${variantNumber} किलो`
       : apiProduct.variant;
-  const categorySlug = CATEGORY_SLUGS[apiProduct.category] || "";
+  const categorySlug = CATEGORY_SLUGS[apiProduct.category] || apiProduct.category.toLowerCase().replace(/\s+/g, "-");
   return {
     sku: apiProduct.sku,
     category: categorySlug,

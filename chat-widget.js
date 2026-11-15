@@ -7,7 +7,7 @@
   "use strict";
 
   // Configuration
-  const API_BASE = window.SHAHI_MEVA_CUSTOMER_API || "http://localhost:3001";
+  const API_BASE = window.SHAHI_MEVA_CUSTOMER_API || "https://website-ai-flax.vercel.app";
   const API_ENDPOINT = API_BASE + "/api/customer/ask";
   const TRANSCRIBE_ENDPOINT = API_BASE + "/api/customer/transcribe";
   const MAX_RECORDING_DURATION_MS = 60000;
