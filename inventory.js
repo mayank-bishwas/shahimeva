@@ -1170,7 +1170,6 @@ function renderInventory(products) {
           if (clonedToast) clonedToast.hidden = true;
 
           clonedDocument.querySelector("#inventory-lightbox")?.remove();
-          clonedDocument.querySelector(".sales-banner-dialog")?.remove();
         },
       });
 

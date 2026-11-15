@@ -1456,7 +1456,6 @@ body.inventory-lightbox-open {
   .inventory-print-button,
   .inventory-quote-tab,
   .inventory-lightbox,
-  .sales-banner-dialog,
   .bulk-enquiry,
   .quantity-control {
     display: none !important;
