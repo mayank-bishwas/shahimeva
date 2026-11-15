@@ -79,6 +79,49 @@ function showInventoryState(state) {
   }
 }
 
+function populateCategoryFilter(products) {
+  const categoryFilter = document.querySelector("#category-filter");
+  if (!categoryFilter) return;
+
+  const menu = categoryFilter.querySelector("#category-filter-menu");
+  if (!menu) return;
+
+  const allOption = menu.querySelector('input[data-all-option="true"]');
+  if (!allOption) return;
+
+  const seen = new Set();
+  const uniqueProducts = [];
+  for (const product of products) {
+    if (!product || !product.category || seen.has(product.category)) continue;
+    seen.add(product.category);
+    uniqueProducts.push(product);
+  }
+
+  for (const product of uniqueProducts) {
+    const label = document.createElement("label");
+    label.className = "inventory-multiselect__option";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = product.category;
+    checkbox.checked = true;
+    checkbox.dataset.filterLabel = product.categoryName || product.category;
+
+    const box = document.createElement("span");
+    box.className = "inventory-multiselect__box";
+    box.setAttribute("aria-hidden", "true");
+
+    const text = document.createElement("span");
+    text.className = "inventory-multiselect__text";
+    text.textContent = product.categoryName || product.category;
+
+    label.append(checkbox, box, text);
+    menu.appendChild(label);
+  }
+
+  allOption.checked = true;
+}
+
 async function loadInventory() {
   showInventoryState("loading");
   try {
@@ -95,6 +138,7 @@ async function loadInventory() {
       return;
     }
     const products = apiProducts.map(mapApiProduct);
+    populateCategoryFilter(products);
     renderInventory(products);
     showInventoryState("ready");
   } catch (error) {

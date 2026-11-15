@@ -287,10 +287,12 @@ document.querySelectorAll("[data-multiselect]").forEach((multiselect) => {
   const menu = multiselect.querySelector(".inventory-multiselect__menu");
   const summary = multiselect.querySelector(".inventory-multiselect__value");
   const allOption = multiselect.querySelector("[data-all-option]");
-  const options = Array.from(
-    multiselect.querySelectorAll('input[type="checkbox"]:not([data-all-option="true"])'),
-  );
   if (!trigger || !menu || !summary || !allOption) return;
+
+  const getOptions = () =>
+    Array.from(
+      multiselect.querySelectorAll('input[type="checkbox"]:not([data-all-option="true"])'),
+    );
 
   const closeMenu = (restoreFocus = false) => {
     menu.hidden = true;
@@ -299,6 +301,7 @@ document.querySelectorAll("[data-multiselect]").forEach((multiselect) => {
   };
 
   const updateSummary = () => {
+    const options = getOptions();
     const selected = options.filter((option) => option.checked);
     if (selected.length === options.length) {
       summary.textContent = allOption.dataset.filterLabel || allOption.value;
@@ -333,10 +336,11 @@ document.querySelectorAll("[data-multiselect]").forEach((multiselect) => {
   multiselect.addEventListener("change", (event) => {
     if (!event.target.matches('input[type="checkbox"]')) return;
     if (event.target === allOption) {
-      options.forEach((option) => {
+      getOptions().forEach((option) => {
         option.checked = allOption.checked;
       });
     } else {
+      const options = getOptions();
       allOption.checked = options.every((option) => option.checked);
     }
     updateSummary();
